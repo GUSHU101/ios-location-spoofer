@@ -383,6 +383,20 @@ function handler(req, res) {
     return sendJson(res, 200, readLoc());
   }
 
+  if (url.pathname === "/client-config" && req.method === "GET") {
+    // The read-only URL is intentionally disclosed only after an admin-session
+    // login. It is needed on the phone, but must never be embedded in the page
+    // source or made available through the weaker read-token authentication.
+    if (!hasValidSession(req)) return rejectAuth(res);
+    const origin = requestOrigin(req);
+    if (!origin) return sendJson(res, 500, { error: "public origin unavailable" });
+    const configUrl = origin + "/loc.json?token=" + encodeURIComponent(READ_TOKEN);
+    return sendJson(res, 200, {
+      configUrl: configUrl,
+      argumentSuffix: "&configUrl=" + encodeURIComponent(configUrl)
+    });
+  }
+
   if (url.pathname === "/set" && req.method === "POST") {
     if (!isAdminRequest(req, url, false)) return rejectAuth(res);
     if (!validWriteOrigin(req)) return sendJson(res, 403, { error: "invalid request origin" });
@@ -594,9 +608,17 @@ const PAGE = `<!doctype html>
   .opts input{width:100%;min-width:0;min-height:44px;padding:.55rem .65rem;font-size:1rem;border:1px solid #98a2b3;border-radius:.5rem}
   .opts button{min-height:48px;padding:.65rem .75rem;font-size:.95rem;border:0;border-radius:.6rem;color:#fff;font-weight:700}
   #savebtn{background:#18723c}#restorebtn{background:#475467}#favadd,#favlistbtn{background:#5145cd}
+  .client-setup{margin:0 .75rem 1rem;padding:1rem;border:1px solid #d0d5dd;border-radius:.75rem;background:#f8fafc}
+  .client-setup h2{margin:0;font-size:1.05rem}.client-setup p{margin:.45rem 0 .85rem;color:#475467;font-size:.9rem;line-height:1.55}
+  .section-heading{display:flex;align-items:center;gap:.55rem}.badge{padding:.2rem .45rem;border-radius:999px;background:#dcfae6;color:#05603a;font-size:.75rem;font-weight:700}
+  .config-fields{display:grid;gap:.75rem}.config-field label{display:block;margin-bottom:.3rem;color:#344054;font-size:.85rem;font-weight:650}
+  .copy-row{display:grid;grid-template-columns:minmax(0,1fr);gap:.5rem}.copy-row input{width:100%;min-width:0;min-height:46px;padding:.6rem .7rem;border:1px solid #98a2b3;border-radius:.55rem;background:#fff;color:#344054;font:inherit;font-size:.875rem}
+  .copy-row button{min-height:46px;padding:.6rem .85rem;border:0;border-radius:.55rem;background:#075fca;color:#fff;font-weight:700}
+  .client-setup details{margin-top:.85rem;border-top:1px solid #d0d5dd;padding-top:.35rem}.client-setup summary{min-height:44px;padding:.65rem 0;cursor:pointer;font-weight:700;color:#1d2939}
+  .client-setup ul{margin:.35rem 0 0;padding-left:1.25rem;color:#344054;font-size:.875rem;line-height:1.65}.client-setup code{overflow-wrap:anywhere}.privacy-note{display:flex;gap:.45rem;align-items:flex-start;color:#694100!important}
   .toast{position:fixed;bottom:max(1rem,env(safe-area-inset-bottom));left:50%;width:max-content;max-width:calc(100% - 2rem);transform:translateX(-50%);background:rgba(16,24,40,.94);color:#fff;padding:.7rem 1rem;border-radius:.55rem;font-size:.9rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999;text-align:center}
   .toast.show{opacity:1}
-  @media (min-width:40rem){.bar{grid-template-columns:minmax(12rem,1fr) auto auto}.bar input{grid-column:auto}.opts{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media (min-width:40rem){.bar{grid-template-columns:minmax(12rem,1fr) auto auto}.bar input{grid-column:auto}.opts{grid-template-columns:repeat(3,minmax(0,1fr))}.copy-row{grid-template-columns:minmax(0,1fr) auto}.config-fields{grid-template-columns:1fr 1fr}}
   @media (min-width:64rem){.shell{margin-block:1rem;border:1px solid #d0d5dd;border-radius:1rem;overflow:hidden;min-height:0}body{background:#eef1f5}}
   @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 </style>
@@ -628,6 +650,37 @@ const PAGE = `<!doctype html>
     <button id="favlistbtn" type="button">我的收藏</button>
   </section>
   <section class="results" id="favs" aria-label="收藏地点"></section>
+  <section class="client-setup" aria-labelledby="client-setup-title">
+    <div class="section-heading"><h2 id="client-setup-title">手机端配置</h2><span class="badge">只读</span></div>
+    <p id="client-setup-help">将下面的远程配置连接到手机代理客户端后，网页中保存的位置会自动同步到手机。</p>
+    <div class="config-fields">
+      <div class="config-field">
+        <label for="client-config-url">远程配置 URL</label>
+        <div class="copy-row">
+          <input id="client-config-url" type="text" readonly autocomplete="off" spellcheck="false" aria-describedby="client-setup-help client-config-status" value="正在安全生成…">
+          <button id="copy-config-url" type="button" disabled>复制地址</button>
+        </div>
+      </div>
+      <div class="config-field">
+        <label for="client-argument">模块参数</label>
+        <div class="copy-row">
+          <input id="client-argument" type="text" readonly autocomplete="off" spellcheck="false" aria-describedby="client-setup-help client-config-status" value="正在安全生成…">
+          <button id="copy-client-argument" type="button" disabled>复制参数</button>
+        </div>
+      </div>
+    </div>
+    <p id="client-config-status" role="status" aria-live="polite">正在读取只读配置…</p>
+    <details>
+      <summary>查看各客户端设置方法</summary>
+      <ul>
+        <li><strong>Shadowrocket / Stash：</strong>导入仓库中的模块后，把“模块参数”追加到现有 <code>argument</code> 末尾。</li>
+        <li><strong>Surge：</strong>在模块参数中新增 <code>configUrl</code>，值使用上面的“远程配置 URL”。</li>
+        <li><strong>Loon：</strong>打开插件参数，把“远程配置 URL”完整粘贴到 <code>configUrl</code>。</li>
+        <li><strong>Quantumult X：</strong>当前专用脚本使用固定坐标，暂不支持此远程同步地址。</li>
+      </ul>
+    </details>
+    <p class="privacy-note"><span aria-hidden="true">⚠</span><span>此地址包含只读密钥，只能读取位置，不能修改位置；仍请勿公开分享。</span></p>
+  </section>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
@@ -678,6 +731,44 @@ function $(id){return document.getElementById(id);}
 function toast(t){var e=$("toast");clearTimeout(toastTimer);e.textContent=t;e.classList.add("show");toastTimer=setTimeout(function(){e.classList.remove("show");},2200);}
 function numOrNull(id){var v=$(id).value.trim();return v===""?null:Number(v);}
 function wrapLng(lng){return ((((Number(lng)+180)%360)+360)%360)-180;}
+
+function copyText(value,successMessage){
+  function fallback(){
+    var input=document.createElement("textarea");
+    input.value=value;
+    input.setAttribute("readonly","");
+    input.style.position="fixed";
+    input.style.opacity="0";
+    document.body.appendChild(input);
+    input.select();
+    var copied=false;
+    try{copied=document.execCommand("copy");}catch(e){}
+    document.body.removeChild(input);
+    if(copied)toast(successMessage);else toast("复制失败，请长按文本手动复制");
+  }
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(value).then(function(){toast(successMessage);}).catch(fallback);
+  }else fallback();
+}
+
+function loadClientConfig(){
+  fetch("/client-config",{credentials:"same-origin"})
+    .then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.json();})
+    .then(function(d){
+      if(!d||typeof d.configUrl!=="string"||typeof d.argumentSuffix!=="string")throw new Error("bad response");
+      $("client-config-url").value=d.configUrl;
+      $("client-argument").value=d.argumentSuffix;
+      $("copy-config-url").disabled=false;
+      $("copy-client-argument").disabled=false;
+      $("client-config-status").textContent="配置已就绪。修改网页位置后，手机端会在下次请求时读取新值。";
+    })
+    .catch(function(){
+      $("client-config-url").value="";
+      $("client-argument").value="";
+      $("client-config-status").setAttribute("role","alert");
+      $("client-config-status").textContent="配置生成失败，请刷新页面或重新登录。";
+    });
+}
 
 function setLocateBusy(busy){
   var b=$("locatebtn");
@@ -958,6 +1049,9 @@ $("savebtn").addEventListener("click",commit);
 $("restorebtn").addEventListener("click",toggleEnabled);
 $("favadd").addEventListener("click",addFavorite);
 $("favlistbtn").addEventListener("click",toggleFavs);
+$("copy-config-url").addEventListener("click",function(){copyText($("client-config-url").value,"已复制远程配置地址");});
+$("copy-client-argument").addEventListener("click",function(){copyText($("client-argument").value,"已复制模块参数");});
+loadClientConfig();
 load();
 </script>
 </body>

@@ -77,6 +77,8 @@ If you change locations frequently, deploy `location-picker`, select a point on 
 
 The Coolify deployment is recommended for a long-running public service: its admin secret never enters the browser URL, and modules receive only a read-only secret. The Worker keeps its token in the URL for client compatibility, so restrict log access and rotate the token periodically.
 
+After login, the Coolify / Node.js page includes a **Mobile client setup** panel. It can copy the read-only remote-config URL or the module argument used by Shadowrocket and Stash. The read-only secret is not embedded in the login or admin page source; an authenticated session retrieves it only when needed.
+
 ## Troubleshooting
 
 - **`MITM failed`**: confirm that the CA is installed and fully trusted, the request host is in the module list, and retry after disabling QUIC / HTTP3.

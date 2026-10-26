@@ -77,6 +77,8 @@ iPhone 会把附近 Wi-Fi 与基站信息发送给 Apple 定位服务，再根�
 
 Coolify 版推荐用于公网长期运行：管理密钥不会进入浏览器地址栏，模块仅持有只读密钥。Cloudflare Worker 版为了兼容现有客户端，Token 会出现在 URL 中，应限制日志访问并定期轮换。
 
+Coolify / Node.js 版登录后会在页面底部显示“手机端配置”：可直接复制只读远程配置 URL，或复制适用于 Shadowrocket / Stash 的模块参数。该只读密钥不会写入登录页或管理页源码，只在已登录会话中按需获取。
+
 ## 常见故障
 
 - **`MITM failed`**：确认 CA 已安装且开启完全信任，请求 Host 在模块列表内，并尝试关闭 QUIC / HTTP3 后重连。

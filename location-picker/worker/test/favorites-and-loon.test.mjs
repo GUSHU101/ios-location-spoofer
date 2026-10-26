@@ -6,6 +6,7 @@ const sourcePath = new URL("../src/page.js", import.meta.url);
 const webuiPath = new URL("../../cloudflare-webui/worker.js", import.meta.url);
 const serverPath = new URL("../../server.js", import.meta.url);
 const loonPath = new URL("../../../ios-location-spoofer.lnplugin", import.meta.url);
+const surgePath = new URL("../../../ios-location-spoofer-surge.sgmodule", import.meta.url);
 
 const pages = [
   ["source page", await readFile(sourcePath, "utf8")],
@@ -38,4 +39,10 @@ test("Loon plugin exposes editable accuracy arguments", async () => {
     /argument=\[\{enabled\},\{latitude\},\{longitude\},\{altitude\},\{horizontalAccuracy\},\{verticalAccuracy\},\{address\},\{configHost\},\{configToken\},\{configUrl\},\{debug\}\]/,
   );
   assert.match(content, /script-path=https:\/\/raw\.githubusercontent\.com\/GUSHU101\/ios-location-spoofer\/main\/location-spoofer\.js/);
+});
+
+test("Surge module exposes the remote picker configuration URL", async () => {
+  const content = await readFile(surgePath, "utf8");
+  assert.match(content, /#!arguments=[^\r\n]*configUrl:/);
+  assert.match(content, /argument=[^\r\n]*configUrl=\{\{\{configUrl\}\}\}/);
 });

@@ -111,6 +111,12 @@ test("health, scoped authentication, clean browser sessions and persistence work
   assert.equal(readOnlyUi.status, 200);
   assert.doesNotMatch(await readOnlyUi.text(), /id="map"/);
 
+  const anonymousClientConfig = await fetch(baseUrl + "/client-config");
+  assert.equal(anonymousClientConfig.status, 401);
+
+  const readTokenClientConfig = await fetch(baseUrl + "/client-config?token=" + readToken);
+  assert.equal(readTokenClientConfig.status, 401);
+
   const login = await fetch(baseUrl + "/session", {
     method: "POST",
     redirect: "manual",
@@ -140,10 +146,31 @@ test("health, scoped authentication, clean browser sessions and persistence work
   assert.match(html, /<label class="sr-only" for="q">搜索地点<\/label>/);
   assert.match(html, /id="toast" role="status" aria-live="polite"/);
   assert.match(html, /action="\/session\/logout"/);
+  assert.match(html, /id="client-setup-title">手机端配置<\/h2>/);
+  assert.match(html, /id="client-config-url"[^>]+readonly/);
+  assert.match(html, /id="copy-config-url"/);
+  assert.match(html, /fetch\("\/client-config",\{credentials:"same-origin"\}\)/);
+  assert.match(html, /\.copy-row\{display:grid;grid-template-columns:minmax\(0,1fr\);gap:\.5rem\}/);
+  assert.match(html, /\.copy-row button\{min-height:46px/);
+  assert.match(html, /@media \(min-width:40rem\)[^\n]*\.copy-row\{grid-template-columns:minmax\(0,1fr\) auto\}/);
   assert.match(html, /https:\/\/tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/);
   assert.doesNotMatch(html, /https:\/\/\{s\}\.tile\.openstreetmap\.org/);
   assert.match(html, /OpenStreetMap<\/a> contributors/);
   assert.doesNotMatch(html, /user-scalable=no|maximum-scale=1/);
+  assert.doesNotMatch(html, new RegExp(readToken));
+
+  const clientConfig = await fetch(baseUrl + "/client-config", {
+    headers: { Cookie: sessionCookie, ...customProxyHeaders }
+  });
+  assert.equal(clientConfig.status, 200);
+  assert.equal(clientConfig.headers.get("cache-control"), "no-store, private");
+  const clientConfigBody = await clientConfig.json();
+  const expectedConfigUrl = customProxyOrigin + "/loc.json?token=" + readToken;
+  assert.deepEqual(clientConfigBody, {
+    configUrl: expectedConfigUrl,
+    argumentSuffix: "&configUrl=" + encodeURIComponent(expectedConfigUrl)
+  });
+  assert.doesNotMatch(JSON.stringify(clientConfigBody), new RegExp(adminToken));
 
   const queryWrite = await fetch(baseUrl + "/set?token=" + adminToken, {
     method: "POST",

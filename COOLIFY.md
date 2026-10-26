@@ -76,7 +76,9 @@ https://picker.example.com/
 
 在登录表单中输入 `SERVICE_HEX_64_LOCATIONPICKERADMIN` 的实际值。验证成功后，服务会设置 `HttpOnly`、`SameSite=Strict` 会话 Cookie；管理密钥不会保留在地址栏或交给页面 JavaScript。
 
-在地图中保存一个测试位置，然后把以下地址放入 Shadowrocket、Loon 等客户端的 `configUrl`：
+登录后滚动到页面底部的**手机端配置**。点击“复制地址”可得到 `configUrl`，点击“复制参数”可得到适合追加到 Shadowrocket / Stash `argument` 末尾的完整参数。展开“查看各客户端设置方法”可查看 Surge、Loon 等客户端的对应步骤。
+
+面板通过已登录会话按需生成只读地址，不会把只读密钥直接写入管理页 HTML。手工配置时，地址格式仍为：
 
 ```text
 https://picker.example.com/loc.json?token=<SERVICE_HEX_64_LOCATIONPICKERREAD>
