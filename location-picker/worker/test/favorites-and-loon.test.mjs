@@ -37,5 +37,5 @@ test("Loon plugin exposes editable accuracy arguments", async () => {
     content,
     /argument=\[\{enabled\},\{latitude\},\{longitude\},\{altitude\},\{horizontalAccuracy\},\{verticalAccuracy\},\{address\},\{configHost\},\{configToken\},\{configUrl\},\{debug\}\]/,
   );
-  assert.match(content, /script-path=https:\/\/raw\.githubusercontent\.com\/mekos2772\/ios-location-spoofer\/main\/location-spoofer\.js/);
+  assert.match(content, /script-path=https:\/\/raw\.githubusercontent\.com\/GUSHU101\/ios-location-spoofer\/main\/location-spoofer\.js/);
 });

@@ -1,7 +1,13 @@
 * text=auto
+.gitattributes text eol=lf
 *.js text eol=lf
 *.mjs text eol=lf
 *.json text eol=lf
+*.md text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.sgmodule text eol=lf
+*.lnplugin text eol=lf
+*.snippet text eol=lf
+*.stoverride text eol=lf
 Dockerfile text eol=lf

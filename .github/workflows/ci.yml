@@ -31,7 +31,7 @@ jobs:
         working-directory: location-picker/worker
         run: npm ci --ignore-scripts
 
-      - name: Run integration and source consistency tests
+      - name: Run integration, documentation, and source consistency tests
         working-directory: location-picker
         run: npm test
 

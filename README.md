@@ -1,176 +1,113 @@
 # iOS Location Spoofer
 
-[English](README.en.md) · **中文**
+**中文** · [English](README.en.md)
 
-用代理软件的 HTTPS 解密功能，把 Apple 地图定位骗到世界任何角落。
+通过 Shadowrocket、Surge、Loon、Quantumult X 或 Stash 的 HTTPS 解密功能，改写 Apple 定位服务返回的坐标。无需越狱，也无需编译 iOS 应用。
 
-> 📖 **新手直接看这篇** → [**小白保姆级图文教程**](使用教程.md)（一步步教你安装、配置、生效，含常见问题排查）
+> [!WARNING]
+> 本项目会在你的设备上启用 HTTPS 中间人解密。仅用于你拥有或获授权设备上的开发、测试与隐私研究；不要用于规避风控、考勤、反欺诈或任何服务规则。CA 私钥只能保存在自己的设备上，不使用时请关闭模块和 HTTPS 解密。
 
-## 参考项目
+## 从这里开始
 
-本项目基于 [acheong08/ios-location-spoofer](https://github.com/acheong08/ios-location-spoofer) 的核心研究。原始项目是用 Go 写的独立 iOS App，通过自建 VPN + MITM 代理实现定位欺骗。
+| 你的目标 | 文档 |
+|---|---|
+| 第一次使用 Shadowrocket | [中文完整教程](使用教程.md) |
+| Read the guide in English | [English tutorial](使用教程.en.md) |
+| 用 Coolify 部署安全的网页选点器 | [Coolify 部署指南](COOLIFY.md) |
+| 用命令行部署 Cloudflare Worker | [Worker / Wrangler 指南](location-picker/worker/README.md) |
+| 只用 Cloudflare 网页后台部署 | [Worker 网页后台指南](location-picker/cloudflare-webui/README.md) |
 
-本仓库将其核心逻辑移植为 JavaScript，适配到 Shadowrocket / Surge / Loon / Quantumult X / Stash 五个代理平台，免编译、免开发者账号，即导即用。
+## 快速使用
 
-### 相比原版新增的功能
+1. 从下表选择代理软件并导入对应文件。
+2. 开启 HTTPS 解密 / MITM，安装 CA 描述文件，并在 iOS 的“证书信任设置”中开启完全信任。
+3. 启用模块，修改 `latitude` 和 `longitude`。
+4. 重连代理，关闭定位服务至少 10 秒后重新开启，再用 Apple 地图验证。
 
-- **多平台支持** — 从单一 iOS App 扩展到五个代理软件，覆盖更多用户
-- **蜂窝基站坐标修改** — 原版 Go 只改了 WiFi 热点坐标，JS 版额外处理了 CellTower（字段 22/24）的坐标替换
-- **多响应格式兼容** — 自动检测 Apple 回应的封装格式（ARPC / synthetic / marker / bare），确保改后还能被 iOS 正确识别
-- **运动状态伪造** — 一并改写 motionActivityType 和 motionActivityConfidence，减少被系统识破的可能
+新手请不要跳过证书信任步骤，完整操作和故障排查见[中文教程](使用教程.md)。
 
-## 怎么回事
+## 支持的客户端
 
-iPhone 看 Wi-Fi 信号和基站信号，拿着 BSSID 列表去问 Apple 这些设备在什么位置。Apple 回一份坐标清单，iOS 根据这些坐标算出自己在哪里。
+| 客户端 | 配置文件 | 导入位置 | 状态 |
+|---|---|---|---|
+| Shadowrocket | [`ios-location-spoofer.sgmodule`](ios-location-spoofer.sgmodule) | 配置 → 模块 → `+` → 来自 URL | 已验证 |
+| Surge | [`ios-location-spoofer-surge.sgmodule`](ios-location-spoofer-surge.sgmodule) | 首页 → 模块 → 安装新模块 | 已验证 |
+| Loon | [`ios-location-spoofer.lnplugin`](ios-location-spoofer.lnplugin) | 设置 → 插件 → 添加插件 | 已验证 |
+| Quantumult X | [`ios-location-spoofer.snippet`](ios-location-spoofer.snippet) | 设置 → 重写 → 添加 | 待更多实测 |
+| Stash | [`ios-location-spoofer.stoverride`](ios-location-spoofer.stoverride) | 覆写 → 安装覆写 | 已验证 |
 
-这套配置做的事情很简单：**在 Apple 发回坐标的路上拦截下来，全部改成你想要的数字**。iPhone 拿到改造过的坐标，算出来就是你指定的地方。
+Shadowrocket 远程导入地址：
 
-## 支持哪些软件
-
-| 软件 | 文件 | 导入方法 | 状态 |
-|------|------|---------|------|
-| Shadowrocket（小火箭） | `ios-location-spoofer.sgmodule` | 配置 → 右上角 + | ✅ 实测通过 |
-| Surge | `ios-location-spoofer-surge.sgmodule` | 首页 → 模块 → 安装新模块 | ✅ 实测通过 |
-| Loon | `ios-location-spoofer.lnplugin` | 设置 → 插件 → 添加插件 | ✅ 实测通过 |
-| Quantumult X | `ios-location-spoofer.snippet` | 设置 → 重写 → 添加 | 🟡 待测试 |
-| Stash | `ios-location-spoofer.stoverride` | 覆写 → 安装覆写 | ✅ 实测通过 |
-
-> 欢迎测过的佬友在 Issue 区报实测结果；不通的地方欢迎直接提 PR 改 —— 至少写明**哪个软件、哪个版本、什么系统、报错的日志原文**。
-
-## 怎么用
-
-1. 软件里打开 HTTPS 解密 / MITM 开关
-2. 安装并信任 CA 证书（设置 → 通用 → VPN 与设备管理 → 安装 → 证书信任设置 → 启用）
-3. 导入模块文件，勾上启用
-4. 断开重连 VPN，开关定位服务
-5. 打开地图 App 验证
-
-### MITM 失败排查
-
-如果代理 Request List 显示 `MITM failed`，通常是 MITM 主机名匹配或 iOS 证书信任状态问题，不是脚本改写失败。请先确认：
-
-1. iOS 已在 **设置 → 通用 → 关于本机 → 证书信任设置** 中对代理 CA 开启「完全信任」。
-2. Request List 里失败请求的 Host 必须在模块 `[MITM] hostname` 中；本项目各模块均已包含 `gs-loc.apple.com`、`gs-loc-cn.apple.com`、`gsp-ssl.ls.apple.com`、`bluedot.is.autonavi.com`、`bluedot.is.autonavi.com.gds.alibabadns.com`。
-3. 若日志显示的是其他 `/clls/wloc` Host，请在 Issue 中贴出完整 Host 和路径，避免用 `*.apple.com` / `*.ls.apple.com` 这类过宽通配导致其他 Apple 请求被 MITM。
-4. 如仍失败，尝试关闭 QUIC/HTTP3 相关选项后重连 VPN，再重新开关定位服务。
-
-### Loon 额外说明
-
-1. 导入 `ios-location-spoofer.lnplugin` 后，在 **设置 → 插件** 里打开插件配置页
-2. 可直接填 **纬度 / 经度**；**地址搜索** 由每 15 分钟的定时任务联网解析并缓存（首次请直接填经纬度，或保存地址后等一轮 cron）
-3. 必须开启 Loon 的 **MITM** 并信任证书，且插件内 `[mitm]` 四个域名生效
-4. 插件含 **Prepare** 请求脚本（设置 `Accept-Encoding: identity`，避免 gzip 引发 `zip decompress error` / 脚本超时）
-5. 改坐标后关开定位；调试打开 **调试日志**，在 Loon 日志搜 `Location spoofer`
-
-> 日志若出现 `Evaluate script timeout` 或 `zip decompress error:-3`：更新插件并重载 Loon，确认三条脚本（Prepare / Response / Geocode cron）均已启用。
-
-## 改坐标
-
-默认 Apple Park（37.3349, -122.00902）。在模块参数里改：
-
+```text
+https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule
 ```
+
+如果测试结果与表格不同，请在 [Issues](https://github.com/GUSHU101/ios-location-spoofer/issues) 中提供客户端版本、iOS 版本、请求 Host 和原始错误日志；请勿提交密钥或完整访问 URL。
+
+## 配置参数
+
+默认位置为 Apple Park：`37.3349, -122.00902`。
+
+```text
 latitude=39.9042&longitude=116.4074
 ```
 
-参数：
+| 参数 | 默认值 | 说明 |
+|---|---:|---|
+| `latitude` | `37.3349` | 纬度，范围 `-90` 到 `90` |
+| `longitude` | `-122.00902` | 经度，范围 `-180` 到 `180` |
+| `altitude` | `530` | 海拔（米），可为负数 |
+| `horizontalAccuracy` | `39` | 水平精度（米） |
+| `verticalAccuracy` | `1000` | 垂直精度（米） |
+| `address` | 空 | 仅 Loon：定时解析地址并缓存 |
+| `failOpen` | `true` | 脚本异常时放行原始响应 |
+| `debug` | `false` | 输出调试日志；排错完成后建议关闭 |
+| `configUrl` | 空 | 可选：网页选点器的 `/loc.json` 完整地址 |
 
-| 名字 | 默认值 | 说明 |
-|------|--------|------|
-| `latitude` | 37.3349 | 目标纬度 |
-| `longitude` | -122.00902 | 目标经度 |
-| `address` | （空） | 地址搜索（Loon 插件 UI 填写，联网解析为经纬度，优先于手动经纬度） |
-| `horizontalAccuracy` | 39 | 水平精度 |
-| `verticalAccuracy` | 1000 | 垂直精度 |
-| `altitude` | 530 | 海拔 |
-| `failOpen` | true | 出错放行原数据 |
-| `debug` | false | 调试日志 |
+## 工作原理
 
-## 文件清单
+iPhone 会把附近 Wi-Fi 与基站信息发送给 Apple 定位服务，再根据返回的坐标计算位置。本项目只匹配定位相关的 `/clls/wloc` 请求，在代理客户端中改写响应里的 Wi-Fi、基站和运动状态字段。
 
-```
-ios-location-spoofer.sgmodule       # Shadowrocket
-ios-location-spoofer-surge.sgmodule # Surge
-ios-location-spoofer.lnplugin       # Loon
-ios-location-spoofer.snippet        # Quantumult X
-ios-location-spoofer.stoverride     # Stash
-location-spoofer.js                 # 核心脚本（四平台共用）
-location-spoofer-qx.js              # QX 专用
-location-spoofer-config.json        # 配置样板
-使用教程.md                         # 小白保姆级图文教程
-location-picker/                    # 进阶（可选）：网页地图选点（Node 或 Cloudflare Worker）
-location-picker/worker/             # Cloudflare Worker 版（免 VPS，支持 Loon configUrl）
-```
+所有客户端配置都只列出必要的五个 Host；不要改成 `*.apple.com` 之类的宽泛通配符，否则会扩大 HTTPS 解密范围。
 
-## 进阶：网页地图选点工具
+## 网页地图选点器（可选）
 
-经常换定位、懒得手动查坐标改参数？项目自带 [`location-picker/`](location-picker/) 地图选点工具：点地图即定位、海拔自动、精度可调，Loon / Shadowrocket 通过 `configUrl` 读取。
+经常切换位置时，可以部署 `location-picker`，在地图上点选并让客户端通过 `configUrl` 读取坐标。
 
-**四种部署方式：**
+| 部署方式 | 适合场景 | 鉴权方式 | 指南 |
+|---|---|---|---|
+| Coolify / Docker Compose | 有服务器；希望管理端与客户端权限分离 | 管理密钥 + 只读密钥 + 浏览器会话 | [Coolify 指南](COOLIFY.md) |
+| Cloudflare Worker（CLI） | 无服务器；熟悉命令行 | 单个 URL Token | [Wrangler 指南](location-picker/worker/README.md) |
+| Cloudflare Worker（网页） | 无服务器；只想复制单文件 | 单个 URL Token | [网页后台指南](location-picker/cloudflare-webui/README.md) |
+| Node.js 直接运行 | 本地开发或已有进程管理方案 | 管理密钥 + 只读密钥 + 浏览器会话 | [`location-picker/server.js`](location-picker/server.js) 文件头 |
 
-| 方式 | 目录 | 适合 |
-|------|------|------|
-| **Cloudflare Worker — Wrangler CLI**（推荐） | [`location-picker/worker/`](location-picker/worker/) | 免 VPS、自带 HTTPS；熟悉命令行 |
-| **Cloudflare Worker — 网页后台** | [`location-picker/cloudflare-webui/`](location-picker/cloudflare-webui/) | 免 VPS、自带 HTTPS；不想装 npm / Wrangler，复制单文件即可 |
-| Node 自托管 | [`location-picker/server.js`](location-picker/server.js) | 有自己的 VPS / NAS |
-| Docker / Coolify | [`docker-compose.yml`](docker-compose.yml) | 自托管、持久化和自动健康检查 |
+Coolify 版推荐用于公网长期运行：管理密钥不会进入浏览器地址栏，模块仅持有只读密钥。Cloudflare Worker 版为了兼容现有客户端，Token 会出现在 URL 中，应限制日志访问并定期轮换。
 
-Loon 插件 **远程配置 URL** 示例：
+## 常见故障
 
-```
-https://你的worker.workers.dev/loc.json?token=你的TOKEN
-```
+- **`MITM failed`**：确认 CA 已安装且开启完全信任，请求 Host 在模块列表内，并尝试关闭 QUIC / HTTP3 后重连。
+- **坐标不变化**：确认模块和 HTTPS 解密均已启用；关闭定位服务至少 10 秒后重开，并彻底退出地图再打开。
+- **网页选点已保存但客户端未更新**：直接请求 `/loc.json` 核对坐标；Cloudflare KV 与 Loon 缓存可能需要约 60 秒。
+- **恢复真实位置**：关闭模块或代理总开关，再关闭并重新开启定位服务。
 
-## 友情链接
+更多逐项检查见[中文教程的故障排查](使用教程.md#故障排查)。
 
-本项目接受 LINUX DO 社区佬友监督与反馈：[LINUX DO](https://linux.do)
+## 项目结构
 
-## location-picker 服务端配置
-
-`location-picker/server.js` 通过环境变量控制。管理密钥与模块只读密钥均不得少于 32 个字符；缺失或过短时进程会直接退出。
-
-| 变量 | 是否必设 | 默认值 | 说明 |
-|------|---------|--------|------|
-| `TOKEN` | **必设** | 无 | 管理密钥，仅用于首次登录管理页面或 Bearer 管理 API。建议 `openssl rand -hex 32` 生成 |
-| `READ_TOKEN` | **必设（生产）** | `TOKEN` | 模块读取 `/loc.json` 的独立只读密钥。生产环境必须与 `TOKEN` 不同 |
-| `PORT` | 否 | `8080` | 监听端口；1024 以下需 root |
-| `HOST` | 否 | `0.0.0.0` | 监听地址 |
-| `DATA_FILE` | 否 | `location-picker/loc.json` | 坐标数据文件；容器默认 `/data/loc.json` |
-| `TRUST_PROXY` | 否 | `0` | 仅在 Coolify 等可信反向代理后设置为 `1` |
-| `PUBLIC_ORIGIN` | 否 | 空 | 管理页面公开站点来源，例如 `https://picker.example.com`；Coolify 自动设置 |
-| `SESSION_TTL` | 否 | `43200` | 管理页面会话秒数，范围 300–86400 |
-| `CERT` | 否 | 空 | HTTPS 证书 fullchain 路径；与 `KEY` 同时设置才走 https |
-| `KEY` | 否 | 空 | HTTPS 私钥路径；与 `CERT` 同时设置才走 https |
-
-启动示例：
-
-```bash
-# http（最简，先跑通流程再用 https）
-TOKEN=$(openssl rand -hex 32) READ_TOKEN=$(openssl rand -hex 32) PORT=8080 node server.js
-
-# https（复用 acme.sh 证书；续期无需重启，进程每 12 小时自动热加载）
-TOKEN=$(openssl rand -hex 32) READ_TOKEN=$(openssl rand -hex 32) PORT=8443 \
-CERT=/root/cert/example.com/fullchain.pem \
-KEY=/root/cert/example.com/privkey.pem \
-node server.js
+```text
+location-spoofer.js                 客户端共享核心脚本
+location-spoofer-qx.js              Quantumult X 专用脚本
+ios-location-spoofer.*              五种客户端配置
+location-picker/server.js           Node.js 网页选点服务
+location-picker/worker/             Cloudflare Worker 源码与测试
+location-picker/cloudflare-webui/   Worker 单文件发布产物
+docker-compose.yml                  Coolify 部署入口
 ```
 
-数据文件 `loc.json` 使用临时文件、`fsync` 和原子替换保存，降低进程或主机异常中断导致配置损坏的风险；文件已在 `.gitignore` 中忽略。
+每次推送和拉取请求都会执行集成测试、文档内部链接检查、Cloudflare 产物一致性检查、依赖审计、Compose 校验和生产镜像构建。
 
-> ⚠️ **不要把 `TOKEN` 写在命令行历史里**——推荐用 systemd 的 `Environment=` 或 `.env` + `direnv`，避免 `history` / `ps aux` 泄露。
+## 来源与许可
 
-### Docker
+核心研究来源于 [acheong08/ios-location-spoofer](https://github.com/acheong08/ios-location-spoofer)。本仓库将其逻辑移植到 JavaScript，并增加多客户端适配、基站坐标处理、响应格式兼容和网页选点器。
 
-```bash
-cd location-picker
-printf "TOKEN=%s\nREAD_TOKEN=%s\n" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
-docker compose up -d
-```
-
-镜像基于 `node:22-alpine`，以非 root 用户和只读根文件系统运行；坐标保存在命名卷中。
-
-### Coolify
-
-Coolify 可直接从仓库根目录的 [`docker-compose.yml`](docker-compose.yml) 部署。完整步骤、域名端口、密钥和备份说明见 [`COOLIFY.md`](COOLIFY.md)。
-Coolify 会自动生成并持久保存独立的管理密钥和只读密钥，不要把示例占位值用于生产环境。
-
-仓库 CI 会在每次推送和拉取请求中运行集成测试、生成产物一致性检查、依赖审计和生产容器构建，避免 Coolify 部署入口或 Cloudflare 单文件产物悄悄失效。
+许可证见 [LICENSE](LICENSE)。

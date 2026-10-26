@@ -1,478 +1,112 @@
-# Cloudflare 网页后台部署教程
+# Cloudflare Worker 网页后台部署
 
-> `worker.js` 是从 `../worker/src/` 自动生成的发布产物。修改源码后请在 `../worker/` 执行 `npm run build:webui`，并用 `npm run check:webui` 检查两者没有漂移；不要直接只改生成文件。
+[项目首页](../../README.md) · [Coolify 部署](../../COOLIFY.md) · [Worker CLI](../worker/README.md) · **Worker 网页后台**
 
-这是一份给新手看的 Cloudflare Worker 网页后台部署教程。它不要求本地安装 Node.js、npm 或 Wrangler，也不要求理解多文件 Worker 项目结构。
+本指南适合不想安装 Node.js 或 Wrangler 的用户：在 Cloudflare Dashboard 创建 Worker，粘贴本目录的单文件 [`worker.js`](worker.js)，再绑定 KV 和 Secret。
 
-如果你会命令行，推荐使用 [`../worker/`](../worker/) 里的 Wrangler 部署方式。  
-如果你只想在 Cloudflare 网页后台复制粘贴，请使用本目录的单文件 Worker：
+> [!IMPORTANT]
+> `worker.js` 是从 [`../worker/src/`](../worker/src/) 自动生成的发布产物。开发者应修改源码并在 `../worker/` 运行 `npm run build:webui`，不要只修改生成文件。
 
-```text
-location-picker/cloudflare-webui/worker.js
-```
+> [!WARNING]
+> Worker 版使用一个 `TOKEN` 保护管理页和 `/loc.json`，Token 会出现在 URL 中。不要分享完整 URL，限制 Cloudflare 日志访问，并定期轮换。需要管理密钥与客户端只读密钥分离时，请使用 [Coolify 部署](../../COOLIFY.md)。
 
-## 这份教程解决什么问题
+## 1. 创建 Worker
 
-`location-picker/server.js` 是 Node/VPS/NAS 版，不适合直接部署到 Cloudflare Worker。Cloudflare Worker 也不能使用 Node 的 `http`、`https`、`fs` 和本地 `loc.json`。
+1. 打开 Cloudflare Dashboard → **Workers & Pages**。
+2. 选择创建 **Worker**，不要选择静态 Pages。
+3. 名称可填写 `ios-location-picker`。
+4. 创建后进入 **Edit code**。
+5. 删除默认 Hello World 代码，复制 [`worker.js`](worker.js) 的全部内容并部署。
 
-Cloudflare 正确结构是：
+不要复制 GitHub 网页本身的 HTML；应打开文件的 Raw 内容或先下载文件。出现 `Unexpected token '<'` 通常说明粘贴的是网页 HTML。
 
-```text
-Cloudflare Worker：提供地图页面和 API
-Cloudflare KV：保存当前坐标
-Worker Secret：保存访问口令 TOKEN
-```
+## 2. 创建并绑定 KV
 
-为了避免 Cloudflare 在线编辑器的多文件入口问题，本目录提供了一个已经合并好的 `worker.js`。把它复制到 Cloudflare Worker 默认代码文件即可。
+1. 在 Cloudflare Dashboard 的 Workers KV 中创建命名空间，名称可用 `LOC_KV`。
+2. 回到 Worker → **Settings** → **Bindings** → **Add binding**。
+3. 类型选择 **KV Namespace**。
+4. 变量名必须填写 `LOC_KV`，并选择刚创建的命名空间。
+5. 保存；如果 Cloudflare 要求重新部署，请完成部署。
 
-## 一、创建 Worker
+`LOC_KV` 区分大小写，不能改成 `loc_kv`、`KV` 或其他名称。
 
-1. 打开 Cloudflare Dashboard。
-2. 进入：
+## 3. 添加 TOKEN Secret
 
-```text
-Workers & Pages
-```
+1. 打开 Worker → **Settings** → **Variables and Secrets**。
+2. 添加类型为 **Secret** 的变量，名称填写 `TOKEN`。
+3. 值使用密码管理器生成的长随机字符串，建议至少 64 个十六进制字符。
+4. 保存并重新部署。
 
-3. 点击：
+不要使用生日、手机号、`123456` 或文档占位文字，也不要把真实 Token 提交到 GitHub。
 
-```text
-Create application
-```
+## 4. 部署验收
 
-4. 选择：
+假设地址是 `https://ios-location-picker.example.workers.dev`，按顺序检查：
 
-```text
-Worker
-```
+1. 打开 `/health`，应返回：
 
-不要选择 Pages。这个工具需要 API 和 KV，不是静态网站。
+   ```json
+   {"ok":true,"kv":true,"tokenConfigured":true}
+   ```
 
-5. Worker 名字可以填：
+2. 不带 Token 打开 `/` 和 `/loc.json`，均应返回 `403`。
+3. 带 Token 打开地图页：
 
-```text
-ios-location-picker
-```
+   ```text
+   https://ios-location-picker.example.workers.dev/?token=YOUR_TOKEN
+   ```
 
-6. 创建后进入 Worker，点击：
+4. 搜索只会移动地图视野；必须在地图上点一下放置图钉，再点**保存定位**。
+5. 打开以下地址，确认返回刚保存的坐标：
 
-```text
-Edit code
-```
+   ```text
+   https://ios-location-picker.example.workers.dev/loc.json?token=YOUR_TOKEN
+   ```
 
-## 二、复制单文件 worker.js
+`/health` 中 `kv:false` 表示 KV 绑定错误；`tokenConfigured:false` 表示缺少 Secret `TOKEN`。
 
-1. 打开本目录的：
+## 5. 配置客户端
 
-```text
-location-picker/cloudflare-webui/worker.js
-```
-
-2. 复制全部内容。
-3. 回到 Cloudflare 的代码编辑器。
-4. 找到默认文件，通常叫：
+在 Shadowrocket 模块的 `argument=` 末尾追加：
 
 ```text
-worker.js
+&configUrl=https://ios-location-picker.example.workers.dev/loc.json?token=YOUR_TOKEN
 ```
 
-或者 Cloudflare 默认显示的 Hello World 文件。
+Loon 用户可把同一个完整地址填入插件的**远程配置 URL**。保存后重连代理，关闭 iOS 定位服务至少 10 秒再开启，然后用 Apple 地图验证。
 
-5. 删除原来的 Hello World 代码。
-6. 粘贴本目录 `worker.js` 的全部内容。
-7. 点击：
+首次部署模块时，请使用当前仓库的脚本地址：
 
 ```text
-Deploy
+https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/location-spoofer.js
 ```
 
-部署后访问带 TOKEN 的 Worker 主页，如果能看到地图页面，说明代码部分已经成功。例如：
+## 6. 可选：绑定自定义域名
 
-```text
-https://你的Worker地址/?token=你的TOKEN
+进入 Worker → **Settings** → **Domains & Routes** → **Add Custom Domain**。域名成功绑定后，重新完成 `/health`、地图保存和 `/loc.json` 三项验收，并把所有客户端 `configUrl` 更新为新域名。
+
+## 故障排查
+
+| 现象 | 原因与处理 |
+|---|---|
+| 页面仍显示 Hello World | 默认代码没有被替换，或部署的是另一个 Worker |
+| `Unexpected token '<'` | 粘贴了 GitHub HTML；重新复制 `worker.js` 的 Raw 内容 |
+| `/health` 显示 `kv:false` | 重新绑定 KV，变量名必须为 `LOC_KV` |
+| `/health` 显示 `tokenConfigured:false` | 添加 Secret `TOKEN` 后重新部署 |
+| 根路径返回 `403` | URL 缺少 Token，或 Secret 已轮换 |
+| 搜索后坐标没变化 | 搜索后还需点地图放置图钉并点击保存 |
+| `/loc.json` 已更新但手机未变化 | 等待最多约 60 秒，重连代理并刷新 iOS 定位服务 |
+
+## 开发者维护说明
+
+单文件发布流程位于 [`../worker/scripts/build-webui.mjs`](../worker/scripts/build-webui.mjs)：
+
+```bash
+cd location-picker/worker
+npm ci
+npm test
+npm run build:webui
+npm run check:webui
 ```
 
-不带 TOKEN 访问主页应该返回 403。
-
-## 三、创建 KV
-
-1. 回到 Cloudflare Dashboard。
-2. 进入：
-
-```text
-Workers & Pages
-```
-
-3. 找到：
-
-```text
-KV
-```
-
-或：
-
-```text
-Workers KV
-```
-
-4. 创建一个 namespace。
-5. 名字建议填：
-
-```text
-LOC_KV
-```
-
-## 四、绑定 KV 到 Worker
-
-1. 进入你的 Worker。
-2. 进入：
-
-```text
-Settings
-```
-
-3. 找到：
-
-```text
-Bindings
-```
-
-4. 点击：
-
-```text
-Add binding
-```
-
-5. 类型选择：
-
-```text
-KV Namespace
-```
-
-6. 变量名必须填：
-
-```text
-LOC_KV
-```
-
-7. 选择刚才创建的 KV namespace。
-8. 保存。
-
-注意：变量名必须一模一样。不能写成 `loc_kv`、`KV` 或 `LOCATION_KV`。
-
-## 五、添加 TOKEN
-
-TOKEN 是地图保存和配置读取的访问口令。
-
-1. 进入 Worker 的：
-
-```text
-Settings
-```
-
-2. 找到：
-
-```text
-Variables and Secrets
-```
-
-3. 点击添加变量。
-4. 类型选择：
-
-```text
-Secret
-```
-
-5. 名字填：
-
-```text
-TOKEN
-```
-
-6. 值填一串足够长的随机字符，例如：
-
-```text
-把这里换成你自己的随机字符串
-```
-
-可以用密码管理器生成，也可以用其他随机字符串生成器。不要使用 `123456`、生日、手机号等弱口令。
-
-保存后，如果 Cloudflare 提示重新部署，请再点一次 Deploy。
-
-## 六、检查是否成功
-
-假设 Worker 地址是：
-
-```text
-https://ios-location-picker.你的账号.workers.dev
-```
-
-打开：
-
-```text
-https://ios-location-picker.你的账号.workers.dev/health
-```
-
-必须看到：
-
-```json
-{"ok":true,"kv":true,"tokenConfigured":true}
-```
-
-字段含义：
-
-| 字段 | 正常值 | 说明 |
-|------|--------|------|
-| `ok` | `true` | Worker 正常 |
-| `kv` | `true` | KV 绑定成功 |
-| `tokenConfigured` | `true` | TOKEN 已配置 |
-
-如果看到：
-
-```json
-{"ok":true,"kv":false,"tokenConfigured":true}
-```
-
-说明 KV 没绑定好。回到 Bindings，检查变量名是否是：
-
-```text
-LOC_KV
-```
-
-如果看到：
-
-```json
-{"ok":true,"kv":true,"tokenConfigured":false}
-```
-
-说明 TOKEN 没加好。回到 Variables and Secrets，添加 Secret：
-
-```text
-TOKEN
-```
-
-## 七、绑定自己的域名
-
-如果不想用很长的 `workers.dev` 地址，可以绑定自己的域名。
-
-例如：
-
-```text
-myloc.example.com
-```
-
-操作：
-
-1. 进入你的 Worker。
-2. 进入：
-
-```text
-Settings
-```
-
-3. 找到：
-
-```text
-Domains & Routes
-```
-
-或：
-
-```text
-Triggers
-```
-
-4. 点击：
-
-```text
-Add Custom Domain
-```
-
-5. 填你的域名：
-
-```text
-myloc.example.com
-```
-
-6. 保存。
-
-如果域名 DNS 已经托管在 Cloudflare，Cloudflare 会自动处理 DNS 和 HTTPS 证书。
-
-绑定成功后检查：
-
-```text
-https://myloc.example.com/health
-```
-
-正常应该返回：
-
-```json
-{"ok":true,"kv":true,"tokenConfigured":true}
-```
-
-## 八、Shadowrocket 小火箭配置
-
-在小火箭模块的 `argument=` 最后追加：
-
-```text
-&configUrl=https://你的域名/loc.json?token=你的TOKEN
-```
-
-如果没有自定义域名，就使用 Worker 地址：
-
-```text
-&configUrl=https://ios-location-picker.你的账号.workers.dev/loc.json?token=你的TOKEN
-```
-
-完整示例：
-
-```ini
-[Script]
-iOS Location Spoofer = type=http-response,pattern=^https?:\/\/(?:gs-loc(?:-cn)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$,requires-body=1,binary-body-mode=1,max-size=1048576,timeout=10,script-path=https://raw.githubusercontent.com/mekos2772/ios-location-spoofer/main/location-spoofer.js,argument=mode=response&latitude=37.3349&longitude=-122.00902&horizontalAccuracy=39&verticalAccuracy=1000&altitude=530&debug=false&configUrl=https://你的域名/loc.json?token=你的TOKEN
-
-[MITM]
-hostname = %APPEND% gs-loc.apple.com, gs-loc-cn.apple.com, gsp-ssl.ls.apple.com, bluedot.is.autonavi.com, bluedot.is.autonavi.com.gds.alibabadns.com
-```
-
-`[MITM]` 部分保持不变。
-
-## 九、地图怎么用
-
-最容易漏的一点：
-
-```text
-搜索地点不等于保存定位。
-```
-
-正确流程：
-
-1. 打开地图页面：
-
-```text
-https://你的域名/?token=你的TOKEN
-```
-
-2. 搜索地点。
-3. 地图会移动到搜索结果附近。
-4. 一定要在地图上点一下，放置图钉。
-5. 点击：
-
-```text
-保存定位
-```
-
-6. 看到已保存提示。
-
-然后检查：
-
-```text
-https://你的域名/loc.json?token=你的TOKEN
-```
-
-如果里面的经纬度已经变化，说明 Cloudflare 保存成功。
-
-## 十、iPhone 上生效步骤
-
-保存地图定位后：
-
-1. 小火箭断开重连。
-2. iPhone 关开定位服务。
-3. 打开 Apple 地图测试。
-
-如果还是没变，检查：
-
-- 小火箭模块是否真的启用
-- HTTPS 解密 / MITM 是否开启
-- CA 证书是否已安装并信任
-- 模块参数里是否真的加了 `configUrl`
-- `loc.json?token=...` 返回的经纬度是否已经变化
-
-## 十一、常见问题
-
-### 访问主页不带 token 也能看到地图，安全吗？
-
-新版单文件 Worker 已经收紧为：地图主页也必须带正确 TOKEN 才能打开。
-
-不带 TOKEN 访问：
-
-```text
-https://你的域名/
-```
-
-应该返回：
-
-```json
-{"error":"bad token"}
-```
-
-不带 TOKEN 访问：
-
-```text
-https://你的域名/loc.json
-```
-
-应该返回：
-
-```json
-{"error":"bad token"}
-```
-
-这说明坐标接口没有裸露。
-
-### `/health` 正常，但小火箭没变化
-
-先检查：
-
-```text
-https://你的域名/loc.json?token=你的TOKEN
-```
-
-如果经纬度还是默认：
-
-```text
-37.3349, -122.00902
-```
-
-说明你还没有在地图上点图钉并保存。
-
-### 搜索后没变化
-
-搜索只是移动地图视野。必须在地图上点一下放图钉，再点保存。
-
-### Cloudflare 显示 Hello World
-
-说明你没有替换默认 `worker.js`，或者部署的不是当前 Worker。
-
-请重新打开 Worker 的 Edit code，把本目录里的 `worker.js` 全部复制进去，然后 Deploy。
-
-### 报 `Unexpected token '<'`
-
-说明你复制了 GitHub 网页 HTML，不是真正的 JS 文件。
-
-请使用本目录里的：
-
-```text
-worker.js
-```
-
-不要复制 GitHub 网页源码。
-
-## 十二、最终使用模板
-
-地图页面：
-
-```text
-https://你的域名/?token=你的TOKEN
-```
-
-小火箭 configUrl：
-
-```text
-https://你的域名/loc.json?token=你的TOKEN
-```
-
-小火箭追加参数：
-
-```text
-&configUrl=https://你的域名/loc.json?token=你的TOKEN
-```
+源码、测试和生成产物应在同一次提交中保持一致。

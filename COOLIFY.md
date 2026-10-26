@@ -1,78 +1,136 @@
-# Coolify 部署
+# 用 Coolify 部署 Location Picker
 
-本仓库根目录已经提供适用于 Coolify 的 `docker-compose.yml`。应用只在容器内监听 `8080`，不发布宿主机端口；HTTPS 和公网路由由 Coolify 代理负责。
+[项目首页](README.md) · [English README](README.en.md) · [Shadowrocket 教程](使用教程.md) · **Coolify 部署**
 
-## 当前创建页面
+仓库根目录的 [`docker-compose.yml`](docker-compose.yml) 是 Coolify 部署入口。容器只监听内部端口 `8080`；公网域名、HTTPS 和证书由 Coolify 代理管理。
 
-如果页面已经识别到 `Docker Compose selected`，请保持以下值：
+本方案会自动生成两个不同的 64 字符密钥：
 
-- Branch：`main`
-- Build pack：`Docker Compose`
-- Docker Compose File：`docker-compose.yml`
-- Base directory：`/`
-- Compose file：`/docker-compose.yml`
+- **管理密钥**：仅用于登录地图管理页和写入操作。
+- **只读密钥**：仅放入客户端的 `configUrl`，用于读取 `/loc.json`。
 
-更新到最新提交后先点 **Scan Again**。根目录不再提供 `.env.example`，因此不应继续看到带占位密钥的 `.env.example · 3 variables` 提示。确认扫描结果后点 **Continue**。
+## 部署前检查
 
-## 创建应用
+- Coolify 已安装并能从 GitHub 拉取公开仓库。
+- 服务器的 Coolify 代理和 HTTPS 工作正常。
+- 如果你使用自定义域名，该域名已解析到 Coolify 服务器。
 
-1. 在 Coolify 中新建 **Git Based → Docker Compose** 应用。
-2. 仓库填写 `https://github.com/GUSHU101/ios-location-spoofer`，分支选择 `main`。
-3. Compose 文件路径填写 `/docker-compose.yml`。
-4. 使用 Coolify 的普通 Compose 部署模式，不要开启 Raw Compose。
-5. Compose 中的 `SERVICE_URL_LOCATION_PICKER_8080` 会让 Coolify 为 `location-picker` 服务生成域名并路由到内部端口 `8080`。如需自有域名，在 Domains 中替换生成域名，服务选择 `location-picker`、协议选择 HTTPS、内部端口填写 `8080`。
+不要在 GitHub、Coolify 截图或聊天记录中填写真实密钥。
 
-Coolify 官方说明：Compose 应用应在文件中声明健康检查和持久卷，并且不要为通过域名代理访问的服务发布宿主机端口。
+## 1. 创建 Compose 应用
 
-## 环境变量
+在 Coolify 中新建 **Git Based → Docker Compose** 应用，并填写：
 
-Coolify 会根据 Compose 中的 `SERVICE_HEX_64_*` 变量自动生成并持久保存两个不同的 64 字符随机密钥：
+| 字段 | 值 |
+|---|---|
+| Repository | `GUSHU101/ios-location-spoofer` |
+| Branch | `main` |
+| Build pack | `Docker Compose` |
+| Docker Compose File | `docker-compose.yml` |
+| Base directory | `/` |
+| Compose file | `/docker-compose.yml` |
+
+使用 Coolify 的普通 Docker Compose 模式，不要启用 Raw Compose。仓库更新后如果扫描结果仍显示旧文件，先点 **Scan Again**。
+
+根目录没有 `.env.example`。如果创建页面仍显示旧的 `.env.example · 3 variables`，说明仓库扫描缓存尚未刷新。
+
+## 2. 确认自动生成的环境变量
+
+Coolify 解析 Compose 后，应在 Environment Variables 中生成并持久保存：
 
 ```dotenv
-SERVICE_HEX_64_LOCATIONPICKERADMIN=<Coolify 自动生成>
-SERVICE_HEX_64_LOCATIONPICKERREAD=<Coolify 自动生成>
+SERVICE_HEX_64_LOCATIONPICKERADMIN=<自动生成的 64 字符管理密钥>
+SERVICE_HEX_64_LOCATIONPICKERREAD=<自动生成的 64 字符只读密钥>
+SERVICE_URL_LOCATION_PICKER_8080=<Coolify 生成的 HTTPS URL>
 SESSION_TTL=43200
 ```
 
-无需把真实密钥写入仓库。解析完成后可在 Coolify 的 Environment Variables 页面查看或轮换它们；不要把真实值提交到 Git、部署日志或截图中。
+部署前确认：
 
-- `SERVICE_HEX_64_LOCATIONPICKERADMIN`：映射为容器内的 `TOKEN`，只用于首次打开管理页面和 Bearer 管理 API。
-- `SERVICE_HEX_64_LOCATIONPICKERREAD`：映射为容器内的 `READ_TOKEN`，只允许读取 `/loc.json`，供 Shadowrocket、Surge、Loon、Quantumult X 或 Stash 使用。
-- `SERVICE_URL_LOCATION_PICKER_8080`：由 Coolify 管理的公开 HTTPS URL，同时用于严格校验管理页面的写请求来源。
-- `SESSION_TTL`：管理页面会话有效期，默认 12 小时，允许范围 5 分钟到 24 小时。
+1. 两个 `SERVICE_HEX_64_*` 值均为 64 字符。
+2. 两个值不相同。
+3. `SERVICE_URL_LOCATION_PICKER_8080` 是最终要访问的 HTTPS 来源，不带额外路径。
 
-首次解析后请确认两个 `SERVICE_HEX_64_*` 值均已生成、长度为 64 且互不相同，再开始部署。
+Compose 会把这些值分别映射为容器内的 `TOKEN`、`READ_TOKEN` 和 `PUBLIC_ORIGIN`。不要手动新增同名的容器变量来覆盖它们。
 
-## 首次访问
+## 3. 配置域名并部署
 
-部署成功后打开：
+`SERVICE_URL_LOCATION_PICKER_8080` 会让 Coolify 为 `location-picker` 服务创建公开 URL，并代理到容器内部端口 `8080`。
+
+如需自定义域名：
+
+1. 在应用 Domains 中选择服务 `location-picker`。
+2. 设置 HTTPS 域名，例如 `https://picker.example.com`。
+3. 内部端口填写 `8080`。
+4. 保存并重新部署，使 `PUBLIC_ORIGIN` 与最终域名一致。
+
+不要添加宿主机端口映射，也不要在容器内配置 `CERT` / `KEY`。TLS 由 Coolify 统一终止。
+
+## 4. 首次登录与客户端配置
+
+打开应用根路径：
 
 ```text
-https://你的域名/
+https://picker.example.com/
 ```
 
-在登录表单输入 `SERVICE_HEX_64_LOCATIONPICKERADMIN` 的实际值。服务通过 POST 验证后会换成 `HttpOnly`、`SameSite=Strict` 会话 Cookie，管理密钥不会进入 URL、浏览器 JavaScript 或后续保存请求。
+在登录表单中输入 `SERVICE_HEX_64_LOCATIONPICKERADMIN` 的实际值。验证成功后，服务会设置 `HttpOnly`、`SameSite=Strict` 会话 Cookie；管理密钥不会保留在地址栏或交给页面 JavaScript。
 
-模块远程配置地址只使用只读密钥：
+在地图中保存一个测试位置，然后把以下地址放入 Shadowrocket、Loon 等客户端的 `configUrl`：
 
 ```text
-https://你的域名/loc.json?token=<SERVICE_HEX_64_LOCATIONPICKERREAD 的实际值>
+https://picker.example.com/loc.json?token=<SERVICE_HEX_64_LOCATIONPICKERREAD>
 ```
 
-## 运维
+这里必须使用**只读密钥**，不要使用管理密钥。
 
-- 健康检查：`GET /healthz`，不需要认证，只返回服务可用状态。
-- 数据：保存在 Compose 命名卷 `location-picker-data` 的 `/data/loc.json`。
-- 备份：在 Coolify 中备份该持久卷；重新部署容器不会清除坐标数据。
-- TLS：由 Coolify 统一签发和终止，生产环境不要设置 `CERT`/`KEY`。
-- 日志：模块读取 URL 含有只读密钥，仍应限制 Coolify 部署日志和代理访问日志的查看权限。
+## 5. 部署验收
 
-## 部署验证
+按顺序完成以下检查：
 
-部署日志显示健康后依次检查：
+1. `GET https://picker.example.com/healthz` 返回 `{"status":"ok"}`。
+2. 根路径显示登录页，错误密钥无法登录。
+3. 使用管理密钥登录后，浏览器地址栏不包含密钥。
+4. 保存新坐标后，只读 URL 返回相同的 `latitude`、`longitude` 和 `enabled`。
+5. 只读密钥不能调用 `/set` 或 `/enable`。
+6. 重新部署应用后再次读取 `/loc.json`，坐标仍然存在。
+7. 客户端使用 `configUrl` 后能读取新坐标；刷新 iOS 定位服务后结果生效。
 
-1. `https://你的域名/healthz` 返回 `{"status":"ok"}`。
-2. 打开根路径，使用管理密钥登录；浏览器地址栏不应包含密钥。
-3. 保存一个测试坐标后，用只读密钥访问 `/loc.json?token=...`，确认返回新坐标。
-4. 使用管理密钥访问 `/loc.json` 可以读取，但只读密钥不能调用 `/set` 或 `/enable`。
-5. 重新部署一次并再次读取 `/loc.json`，确认命名卷中的坐标没有丢失。
+只有以上检查全部通过，才算部署完成。
+
+## 运维与更新
+
+- **数据卷**：坐标保存在命名卷 `location-picker-data` 的 `/data/loc.json`。
+- **备份**：升级或删除应用前，在 Coolify 中备份该卷；删除卷会清除保存的坐标。
+- **更新**：拉取 `main` 最新提交并重新部署。镜像构建会运行锁定的 Node 依赖。
+- **健康检查**：Coolify 通过容器内的 `/healthz` 判断服务状态。
+- **密钥轮换**：修改对应的 `SERVICE_HEX_64_*` 后重新部署。轮换只读密钥后，所有客户端 `configUrl` 必须同步更新。
+- **日志**：只读 Token 位于客户端 URL 中，应限制代理访问日志和 Coolify 日志的查看权限。
+
+## 故障排查
+
+### 应用没有生成域名
+
+确认根 Compose 中仍有 `SERVICE_URL_LOCATION_PICKER_8080: /`，点击 **Scan Again**，并检查应用是否使用普通 Docker Compose 模式。不要手动发布 `8080:8080`。
+
+### 容器持续 Unhealthy
+
+查看启动日志。常见原因是管理密钥或只读密钥缺失、短于 32 字符，或者两个密钥相同。修正变量并重新部署，不要在日志截图中泄露变量值。
+
+### 登录后保存返回来源错误
+
+管理页面的公开域名必须与 `PUBLIC_ORIGIN` 完全一致，包括 `https://`、域名和非默认端口。更新 Domains 后重新部署，让 `SERVICE_URL_LOCATION_PICKER_8080` 重新注入。
+
+### `/loc.json` 返回 `401` 或 `403`
+
+- URL 必须包含 `?token=`。
+- Token 必须是当前的 `SERVICE_HEX_64_LOCATIONPICKERREAD`，复制时不要带尖括号、引号或空格。
+- 密钥轮换后，旧客户端 URL 会立即失效。
+
+### 重新部署后坐标丢失
+
+确认服务挂载的是命名卷 `location-picker-data:/data`，并且部署过程中没有删除或重建该卷。可从最近的 Coolify 卷备份恢复。
+
+## 本地 Compose
+
+只做本地测试时，使用 [`location-picker/docker-compose.yml`](location-picker/docker-compose.yml) 和 [`location-picker/.env.example`](location-picker/.env.example)。本地 Compose 与 Coolify 入口不同，不要把本地 `.env` 提交到 Git。
