@@ -134,6 +134,7 @@ This project welcomes review and feedback from the LINUX DO community: [LINUX DO
 | `HOST` | No | `0.0.0.0` | Listen address. |
 | `DATA_FILE` | No | `location-picker/loc.json` | Location data file; containers use `/data/loc.json`. |
 | `TRUST_PROXY` | No | `0` | Set to `1` only behind a trusted proxy such as Coolify. |
+| `PUBLIC_ORIGIN` | No | empty | Public management origin such as `https://picker.example.com`; Coolify sets it automatically. |
 | `SESSION_TTL` | No | `43200` | Admin browser session lifetime in seconds, clamped to 300–86400. |
 | `CERT` | No | empty | HTTPS fullchain certificate path; HTTPS is used only when both `CERT` and `KEY` are set. |
 | `KEY` | No | empty | HTTPS private key path; used only when both `CERT` and `KEY` are set. |
@@ -168,6 +169,9 @@ The image uses `node:22-alpine`, runs as a non-root user with a read-only root f
 ### Coolify
 
 Coolify can deploy the root [`docker-compose.yml`](docker-compose.yml) directly. See [`COOLIFY.md`](COOLIFY.md) for domain, internal port, secrets, persistence, and backup instructions.
+Coolify automatically generates and persists separate admin and read-only secrets; never use example placeholder values in production.
+
+Repository CI runs integration tests, generated-artifact consistency checks, a dependency audit, and a production container build on every push and pull request.
 
 ## Security note
 

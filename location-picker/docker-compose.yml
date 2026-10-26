@@ -10,6 +10,8 @@ services:
       PORT: 8080
       DATA_FILE: /data/loc.json
       TRUST_PROXY: "0"
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
+      SESSION_TTL: ${SESSION_TTL:-43200}
     volumes:
       - location-picker-data:/data
     healthcheck:

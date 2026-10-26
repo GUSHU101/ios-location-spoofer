@@ -4,8 +4,10 @@ services:
       context: ./location-picker
       dockerfile: Dockerfile
     environment:
-      TOKEN: ${TOKEN:?Set a random admin token with at least 32 characters}
-      READ_TOKEN: ${READ_TOKEN:?Set a different random read-only token with at least 32 characters}
+      TOKEN: ${SERVICE_HEX_64_LOCATIONPICKERADMIN}
+      READ_TOKEN: ${SERVICE_HEX_64_LOCATIONPICKERREAD}
+      SERVICE_URL_LOCATION_PICKER_8080: /
+      PUBLIC_ORIGIN: ${SERVICE_URL_LOCATION_PICKER_8080}
       HOST: 0.0.0.0
       PORT: 8080
       DATA_FILE: /data/loc.json

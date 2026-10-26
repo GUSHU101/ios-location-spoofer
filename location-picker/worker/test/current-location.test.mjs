@@ -43,4 +43,12 @@ for (const [label, content] of pages) {
     assert.match(content, /获取当前位置超时，请到开阔处重试/);
     assert.match(content, /当前浏览器不支持定位/);
   });
+
+  test(`${label} keeps the map controls accessible on small screens`, () => {
+    assert.doesNotMatch(content, /maximum-scale=1|user-scalable=no/);
+    assert.match(content, /<main[^>]*id="main"/);
+    assert.match(content, /<label class="sr-only" for="q">搜索地点<\/label>/);
+    assert.match(content, /id="toast"[^>]*aria-live="polite"/);
+    assert.match(content, /@media \(prefers-reduced-motion:reduce\)/);
+  });
 }

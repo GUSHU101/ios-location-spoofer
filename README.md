@@ -136,6 +136,7 @@ https://你的worker.workers.dev/loc.json?token=你的TOKEN
 | `HOST` | 否 | `0.0.0.0` | 监听地址 |
 | `DATA_FILE` | 否 | `location-picker/loc.json` | 坐标数据文件；容器默认 `/data/loc.json` |
 | `TRUST_PROXY` | 否 | `0` | 仅在 Coolify 等可信反向代理后设置为 `1` |
+| `PUBLIC_ORIGIN` | 否 | 空 | 管理页面公开站点来源，例如 `https://picker.example.com`；Coolify 自动设置 |
 | `SESSION_TTL` | 否 | `43200` | 管理页面会话秒数，范围 300–86400 |
 | `CERT` | 否 | 空 | HTTPS 证书 fullchain 路径；与 `KEY` 同时设置才走 https |
 | `KEY` | 否 | 空 | HTTPS 私钥路径；与 `CERT` 同时设置才走 https |
@@ -170,3 +171,6 @@ docker compose up -d
 ### Coolify
 
 Coolify 可直接从仓库根目录的 [`docker-compose.yml`](docker-compose.yml) 部署。完整步骤、域名端口、密钥和备份说明见 [`COOLIFY.md`](COOLIFY.md)。
+Coolify 会自动生成并持久保存独立的管理密钥和只读密钥，不要把示例占位值用于生产环境。
+
+仓库 CI 会在每次推送和拉取请求中运行集成测试、生成产物一致性检查、依赖审计和生产容器构建，避免 Coolify 部署入口或 Cloudflare 单文件产物悄悄失效。

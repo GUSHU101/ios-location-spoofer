@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            location-picker/package-lock.json
+            location-picker/worker/package-lock.json
+
+      - name: Install location picker metadata
+        working-directory: location-picker
+        run: npm ci --ignore-scripts
+
+      - name: Install Cloudflare Worker tooling
+        working-directory: location-picker/worker
+        run: npm ci --ignore-scripts
+
+      - name: Run integration and source consistency tests
+        working-directory: location-picker
+        run: npm test
+
+      - name: Audit production dependencies
+        working-directory: location-picker
+        run: npm audit --omit=dev
+
+      - name: Audit Worker development dependencies
+        working-directory: location-picker/worker
+        run: npm audit
+
+      - name: Validate Coolify Compose configuration
+        env:
+          SERVICE_HEX_64_LOCATIONPICKERADMIN: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          SERVICE_HEX_64_LOCATIONPICKERREAD: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          SERVICE_URL_LOCATION_PICKER_8080: https://picker.example.test
+        run: docker compose config --quiet
+
+      - name: Validate local Compose configuration
+        working-directory: location-picker
+        env:
+          TOKEN: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          READ_TOKEN: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        run: docker compose config --quiet
+
+      - name: Build production container
+        run: docker build --pull --tag ios-location-picker:test location-picker

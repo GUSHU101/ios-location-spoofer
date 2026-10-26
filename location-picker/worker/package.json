@@ -3,11 +3,20 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:webui": "node scripts/build-webui.mjs",
+    "check:webui": "node scripts/build-webui.mjs --check",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "test": "npm run check:webui && node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "undici": "^7.30.1"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.152.0"
   }
 }

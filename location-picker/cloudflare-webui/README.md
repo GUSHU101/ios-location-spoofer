@@ -1,5 +1,7 @@
 # Cloudflare 网页后台部署教程
 
+> `worker.js` 是从 `../worker/src/` 自动生成的发布产物。修改源码后请在 `../worker/` 执行 `npm run build:webui`，并用 `npm run check:webui` 检查两者没有漂移；不要直接只改生成文件。
+
 这是一份给新手看的 Cloudflare Worker 网页后台部署教程。它不要求本地安装 Node.js、npm 或 Wrangler，也不要求理解多文件 Worker 项目结构。
 
 如果你会命令行，推荐使用 [`../worker/`](../worker/) 里的 Wrangler 部署方式。  

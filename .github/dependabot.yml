@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /location-picker/worker
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /location-picker
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5

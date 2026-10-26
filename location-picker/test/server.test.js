@@ -28,6 +28,7 @@ before(async () => {
       READ_TOKEN: readToken,
       DATA_FILE: dataFile,
       TRUST_PROXY: "1",
+      PUBLIC_ORIGIN: proxyOrigin,
       NODE_ENV: "production"
     },
     stdio: ["ignore", "pipe", "pipe"]
@@ -64,6 +65,23 @@ test("production rejects a shared admin and read token", () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /READ_TOKEN.*TOKEN/);
+});
+
+test("production rejects an invalid public origin", () => {
+  const result = spawnSync(process.execPath, [path.join(__dirname, "..", "server.js")], {
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      TOKEN: adminToken,
+      READ_TOKEN: readToken,
+      PUBLIC_ORIGIN: "javascript:alert(1)"
+    },
+    encoding: "utf8",
+    timeout: 5000
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /PUBLIC_ORIGIN/);
 });
 
 after(async () => {
@@ -107,10 +125,16 @@ test("health, scoped authentication, clean browser sessions and persistence work
   const html = await page.text();
   assert.equal(page.status, 200);
   assert.match(page.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+  assert.match(page.headers.get("content-security-policy"), /form-action 'self'/);
   assert.equal(page.headers.get("referrer-policy"), "no-referrer");
   assert.doesNotMatch(html, new RegExp(adminToken));
   assert.doesNotMatch(html, /__CSP_NONCE__/);
   assert.match(html, /integrity="sha256-/);
+  assert.match(html, /<main class="shell" id="main">/);
+  assert.match(html, /<label class="sr-only" for="q">搜索地点<\/label>/);
+  assert.match(html, /id="toast" role="status" aria-live="polite"/);
+  assert.match(html, /action="\/session\/logout"/);
+  assert.doesNotMatch(html, /user-scalable=no|maximum-scale=1/);
 
   const queryWrite = await fetch(baseUrl + "/set?token=" + adminToken, {
     method: "POST",
@@ -136,6 +160,16 @@ test("health, scoped authentication, clean browser sessions and persistence work
     })
   });
   assert.equal(save.status, 200);
+
+  const invalidMetrics = await fetch(baseUrl + "/set", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + adminToken,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ lat: 39.9042, lng: 116.4074, horizontalAccuracy: -1 })
+  });
+  assert.equal(invalidMetrics.status, 400);
 
   const location = await fetch(baseUrl + "/loc.json?token=" + readToken);
   assert.equal(location.status, 200);
@@ -172,4 +206,17 @@ test("health, scoped authentication, clean browser sessions and persistence work
   });
   assert.equal(bearerWrite.status, 200);
   assert.equal((await bearerWrite.json()).enabled, false);
+
+  const logout = await fetch(baseUrl + "/session/logout", {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      Cookie: sessionCookie,
+      Origin: proxyOrigin,
+      ...proxyHeaders
+    }
+  });
+  assert.equal(logout.status, 303);
+  assert.equal(logout.headers.get("location"), "/");
+  assert.match(logout.headers.get("set-cookie"), /Max-Age=0/);
 });

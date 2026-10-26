@@ -33,6 +33,8 @@ const CERT = process.env.CERT || "";
 const KEY = process.env.KEY || "";
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "loc.json");
 const TRUST_PROXY = process.env.TRUST_PROXY === "1";
+const PUBLIC_ORIGIN_INPUT = String(process.env.PUBLIC_ORIGIN || "").trim();
+const PUBLIC_ORIGIN = normalizeOrigin(PUBLIC_ORIGIN_INPUT);
 const SESSION_TTL = Math.max(300, Math.min(86400, Number.parseInt(process.env.SESSION_TTL || "43200", 10) || 43200));
 const COOKIE_NAME = "location_picker_session";
 const MAX_BODY_BYTES = 10 * 1024;
@@ -50,6 +52,10 @@ if (process.env.NODE_ENV === "production" && safeEqual(TOKEN, READ_TOKEN)) {
   console.error("启动失败：生产环境的 READ_TOKEN 必须与 TOKEN 不同。");
   process.exit(1);
 }
+if (PUBLIC_ORIGIN_INPUT && !PUBLIC_ORIGIN) {
+  console.error("启动失败：PUBLIC_ORIGIN 必须是有效的 http 或 https 站点地址。");
+  process.exit(1);
+}
 if ((CERT && !KEY) || (!CERT && KEY)) {
   console.error("启动失败：CERT 与 KEY 必须同时设置，或同时留空交给反向代理终止 HTTPS。");
   process.exit(1);
@@ -57,12 +63,21 @@ if ((CERT && !KEY) || (!CERT && KEY)) {
 
 // 常量时间比较，避免通过响应时延逐字节爆破 token
 function safeEqual(a, b) {
-  const ab = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  if (ab.length !== bb.length) {
-    return false;
+  const ah = crypto.createHash("sha256").update(String(a)).digest();
+  const bh = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ah, bh);
+}
+
+function normalizeOrigin(value) {
+  if (!value) return "";
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    if (parsed.username || parsed.password) return "";
+    return parsed.origin;
+  } catch (e) {
+    return "";
   }
-  return crypto.timingSafeEqual(ab, bb);
 }
 
 // 字段名/默认值与 location-spoofer.js 的 DEFAULT_CONFIG 对齐
@@ -78,6 +93,13 @@ const DEFAULT = Object.freeze({
 function finiteInRange(value, minimum, maximum, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number >= minimum && number <= maximum ? number : fallback;
+}
+
+function optionalRoundedNumber(value, minimum, maximum) {
+  if (value === undefined || value === null || value === "") return { provided: false };
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > maximum) return { provided: true, valid: false };
+  return { provided: true, valid: true, value: Math.round(number) };
 }
 
 function normalizeLoc(value) {
@@ -226,6 +248,7 @@ function forwardedValue(req, name) {
 }
 
 function requestOrigin(req) {
+  if (PUBLIC_ORIGIN) return PUBLIC_ORIGIN;
   const directProtocol = req.socket.encrypted ? "https" : "http";
   const protocol = TRUST_PROXY ? forwardedValue(req, "x-forwarded-proto") || directProtocol : directProtocol;
   const host = TRUST_PROXY ? forwardedValue(req, "x-forwarded-host") || req.headers.host : req.headers.host;
@@ -241,6 +264,11 @@ function validWriteOrigin(req) {
 function sessionCookie(req) {
   const secure = requestOrigin(req).startsWith("https://");
   return COOKIE_NAME + "=" + createSessionValue() + "; Path=/; Max-Age=" + SESSION_TTL + "; HttpOnly; SameSite=Strict" + (secure ? "; Secure" : "");
+}
+
+function expiredSessionCookie(req) {
+  const secure = requestOrigin(req).startsWith("https://");
+  return COOKIE_NAME + "=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict" + (secure ? "; Secure" : "");
 }
 
 function readJson(req, res, callback) {
@@ -313,14 +341,14 @@ function renderLogin(error) {
     nonce: nonce,
     body: LOGIN_PAGE
       .replaceAll("__CSP_NONCE__", nonce)
-      .replace("__LOGIN_ERROR__", error ? '<p class="error" role="alert">密钥错误，请重试。</p>' : "")
+      .replace("__LOGIN_ERROR__", error ? "密钥错误，请重试。" : "")
   };
 }
 
 function pageCsp(nonce) {
   return "default-src 'none'; base-uri 'none'; connect-src 'self' https://api.open-meteo.com https://nominatim.openstreetmap.org; " +
     "font-src 'self'; frame-ancestors 'none'; img-src 'self' data: blob: https://unpkg.com https://*.autonavi.com https://*.openstreetmap.org; " +
-    "object-src 'none'; script-src 'nonce-" + nonce + "' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com";
+    "form-action 'self'; object-src 'none'; script-src 'nonce-" + nonce + "' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com";
 }
 
 function handler(req, res) {
@@ -359,15 +387,15 @@ function handler(req, res) {
       current.enabled = true;
       current.latitude = latitude;
       current.longitude = longitude;
-      if (value.altitude !== undefined && value.altitude !== null && value.altitude !== "") {
-        current.altitude = Math.round(finiteInRange(value.altitude, -12000, 100000, current.altitude));
+      const altitude = optionalRoundedNumber(value.altitude, -12000, 100000);
+      const horizontalAccuracy = optionalRoundedNumber(value.horizontalAccuracy, 0, 100000);
+      const verticalAccuracy = optionalRoundedNumber(value.verticalAccuracy, 0, 100000);
+      if ((altitude.provided && !altitude.valid) || (horizontalAccuracy.provided && !horizontalAccuracy.valid) || (verticalAccuracy.provided && !verticalAccuracy.valid)) {
+        return sendJson(res, 400, { error: "altitude or accuracy is out of range" });
       }
-      if (value.horizontalAccuracy !== undefined && value.horizontalAccuracy !== null && value.horizontalAccuracy !== "") {
-        current.horizontalAccuracy = Math.round(finiteInRange(value.horizontalAccuracy, 0, 100000, current.horizontalAccuracy));
-      }
-      if (value.verticalAccuracy !== undefined && value.verticalAccuracy !== null && value.verticalAccuracy !== "") {
-        current.verticalAccuracy = Math.round(finiteInRange(value.verticalAccuracy, 0, 100000, current.verticalAccuracy));
-      }
+      if (altitude.provided) current.altitude = altitude.value;
+      if (horizontalAccuracy.provided) current.horizontalAccuracy = horizontalAccuracy.value;
+      if (verticalAccuracy.provided) current.verticalAccuracy = verticalAccuracy.value;
       return sendJson(res, 200, writeLoc(current));
     });
     return;
@@ -404,6 +432,15 @@ function handler(req, res) {
       });
     });
     return;
+  }
+
+  if (url.pathname === "/session/logout" && req.method === "POST") {
+    if (!hasValidSession(req)) return rejectAuth(res);
+    if (!validWriteOrigin(req)) return sendJson(res, 403, { error: "invalid request origin" });
+    return send(res, 303, "text/plain; charset=utf-8", "signed out", {
+      "Location": "/",
+      "Set-Cookie": expiredSessionCookie(req)
+    });
   }
 
   if (url.pathname === "/" && req.method === "GET") {
@@ -489,21 +526,24 @@ const LOGIN_PAGE = `<!doctype html>
 <style nonce="__CSP_NONCE__">
   :root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;color:#101828}
   *{box-sizing:border-box}body{min-height:100vh;margin:0;display:grid;place-items:center;padding:24px}
+  .skip-link{position:fixed;top:.5rem;left:.5rem;z-index:10;padding:.75rem 1rem;background:#101828;color:#fff;border-radius:.5rem;transform:translateY(-150%)}
+  .skip-link:focus{transform:none}
   main{width:min(100%,420px);padding:28px;border:1px solid #e4e7ec;border-radius:18px;background:#fff;box-shadow:0 18px 48px rgba(16,24,40,.1)}
   h1{margin:0 0 8px;font-size:1.5rem}p{margin:0 0 20px;color:#667085;line-height:1.5}
   label{display:block;margin-bottom:8px;font-weight:700}input{width:100%;min-height:48px;border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;font:inherit}
   input:focus-visible{outline:3px solid #84adff;outline-offset:2px}button{width:100%;min-height:48px;margin-top:16px;border:0;border-radius:10px;background:#155eef;color:#fff;font:inherit;font-weight:750;cursor:pointer}
-  button:hover{background:#004eeb}.error{margin:0 0 16px;color:#b42318}
+  button:hover{background:#004eeb}.error{margin:0 0 16px;color:#b42318}.error:empty{display:none}
 </style>
 </head>
 <body>
-<main>
+<a class="skip-link" href="#main">跳到登录表单</a>
+<main id="main">
   <h1>定位选点</h1>
-  <p>输入部署时配置的管理密钥。密钥只在本次登录请求中提交，不会写入页面 URL。</p>
-  __LOGIN_ERROR__
+  <p id="login-help">输入部署时配置的管理密钥。密钥只在本次登录请求中提交，不会写入页面 URL。</p>
+  <p id="login-error" class="error" role="alert" aria-live="assertive">__LOGIN_ERROR__</p>
   <form method="post" action="/session">
     <label for="token">管理密钥</label>
-    <input id="token" name="token" type="password" minlength="32" required autocomplete="current-password" autofocus>
+    <input id="token" name="token" type="password" minlength="32" required aria-required="true" aria-describedby="login-help login-error" autocomplete="current-password" autofocus>
     <button type="submit">安全登录</button>
   </form>
 </main>
@@ -511,59 +551,76 @@ const LOGIN_PAGE = `<!doctype html>
 </html>`;
 
 const PAGE = `<!doctype html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>定位选点</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
 <style nonce="__CSP_NONCE__">
-  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
-  .bar{padding:8px;display:flex;gap:6px;box-sizing:border-box}
-  .bar input{flex:1;padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px}
-  .bar button{padding:10px 14px;font-size:16px;border:0;border-radius:8px;background:#007aff;color:#fff}
-  .bar button:disabled{opacity:.55}
-  .results{margin:0 8px;border:1px solid #e2e2e2;border-radius:8px;max-height:34vh;overflow:auto;display:none}
+  :root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#101828;background:#f6f7f9}
+  *{box-sizing:border-box}html{min-width:320px}body{margin:0;min-height:100%;font-size:1rem}button,input{font:inherit}
+  .skip-link{position:fixed;top:.5rem;left:.5rem;z-index:10001;padding:.75rem 1rem;background:#101828;color:#fff;border-radius:.5rem;transform:translateY(-150%)}
+  .skip-link:focus{transform:none}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem clamp(.75rem,3vw,1.5rem);background:#fff;border-bottom:1px solid #d0d5dd}
+  .topbar h1{margin:0;font-size:clamp(1.125rem,4vw,1.4rem)}.logout-form{margin:0}
+  #logoutbtn{min-width:4.5rem;min-height:44px;padding:.55rem .8rem;border:1px solid #98a2b3;border-radius:.6rem;background:#fff;color:#344054;font-weight:650}
+  .shell{width:min(100%,78rem);margin:0 auto;background:#fff;min-height:calc(100vh - 62px)}
+  .bar{padding:.75rem;display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+  .bar input{grid-column:1/-1;min-width:0;min-height:48px;padding:.7rem .8rem;font-size:1rem;border:1px solid #98a2b3;border-radius:.6rem}
+  .bar button{min-height:48px;padding:.65rem .9rem;border:0;border-radius:.6rem;background:#075fca;color:#fff;font-weight:700}
+  button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.55}
+  button:focus-visible,input:focus-visible,#map:focus-visible{outline:3px solid #84adff;outline-offset:2px}
+  .results{margin:0 .75rem .75rem;border:1px solid #d0d5dd;border-radius:.6rem;max-height:34vh;overflow:auto;display:none;background:#fff}
   .results.show{display:block}
-  .rrow{padding:10px 12px;font-size:14px;border-bottom:1px solid #eee;color:#222;display:flex;align-items:center;gap:8px}
+  .rrow{width:100%;min-height:48px;padding:.65rem .75rem;font-size:.9rem;border:0;border-bottom:1px solid #e4e7ec;color:#1d2939;background:#fff;display:flex;align-items:center;gap:.5rem;text-align:left}
   .rrow:last-child{border-bottom:0}
   .rrow:active{background:#f0f6ff}
-  .rrow .fname{flex:1;min-width:0}
-  .rrow .fdel{padding:6px 10px;font-size:13px;border:0;border-radius:6px;background:#ff3b30;color:#fff;flex-shrink:0}
-  #map{height:52vh}
-  #info{padding:8px 10px;font-size:13px;line-height:1.4}
-  .opts{padding:6px 10px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
-  .opts label{font-size:13px;color:#444;display:flex;flex-direction:column}
-  .opts input{width:88px;padding:8px;font-size:15px;border:1px solid #ccc;border-radius:6px;margin-top:2px}
-  #savebtn{padding:11px 20px;font-size:16px;border:0;border-radius:8px;background:#34c759;color:#fff;font-weight:600}
-  #restorebtn{padding:11px 16px;font-size:15px;border:0;border-radius:8px;background:#8e8e93;color:#fff}
-  #favadd,#favlistbtn{padding:11px 14px;font-size:15px;border:0;border-radius:8px;background:#5856d6;color:#fff}
-  .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
-    background:rgba(0,0,0,.85);color:#fff;padding:10px 16px;border-radius:8px;
-    font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999}
+  .rrow .fname{flex:1;min-width:0;min-height:44px;padding:.5rem;border:0;background:transparent;color:inherit;text-align:left}
+  .rrow .fdel{min-width:44px;min-height:44px;padding:.5rem .75rem;font-size:.85rem;border:0;border-radius:.45rem;background:#b42318;color:#fff;flex-shrink:0}
+  #map{height:clamp(18rem,48dvh,36rem);border-block:1px solid #d0d5dd;background:#e4e7ec}
+  #info{margin:0;padding:.75rem;font-size:.9rem;line-height:1.5;overflow-wrap:anywhere}
+  .opts{padding:.25rem .75rem 1rem;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem;align-items:end}
+  .opts h2{grid-column:1/-1;margin:.25rem 0 0;font-size:1rem}.opts label{font-size:.85rem;color:#344054;display:flex;flex-direction:column;gap:.25rem}
+  .opts input{width:100%;min-width:0;min-height:44px;padding:.55rem .65rem;font-size:1rem;border:1px solid #98a2b3;border-radius:.5rem}
+  .opts button{min-height:48px;padding:.65rem .75rem;font-size:.95rem;border:0;border-radius:.6rem;color:#fff;font-weight:700}
+  #savebtn{background:#18723c}#restorebtn{background:#475467}#favadd,#favlistbtn{background:#5145cd}
+  .toast{position:fixed;bottom:max(1rem,env(safe-area-inset-bottom));left:50%;width:max-content;max-width:calc(100% - 2rem);transform:translateX(-50%);background:rgba(16,24,40,.94);color:#fff;padding:.7rem 1rem;border-radius:.55rem;font-size:.9rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999;text-align:center}
   .toast.show{opacity:1}
+  @media (min-width:40rem){.bar{grid-template-columns:minmax(12rem,1fr) auto auto}.bar input{grid-column:auto}.opts{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media (min-width:64rem){.shell{margin-block:1rem;border:1px solid #d0d5dd;border-radius:1rem;overflow:hidden;min-height:0}body{background:#eef1f5}}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 </style>
 </head>
 <body>
-<div class="bar">
-  <input id="q" placeholder="搜地名，回车列出候选（只预览，不改定位）">
-  <button id="locatebtn" disabled>当前位置</button>
-  <button id="btn">搜</button>
-</div>
-<div class="results" id="results"></div>
-<div id="map"></div>
-<div id="info">加载中…</div>
-<div class="opts">
-  <label>海拔(米)<input id="alt" type="number" inputmode="numeric"></label>
-  <label>水平精度<input id="hacc" type="number" inputmode="numeric"></label>
-  <label>垂直精度<input id="vacc" type="number" inputmode="numeric"></label>
-  <button id="savebtn">保存定位</button>
-  <button id="restorebtn">恢复真实定位</button>
-  <button id="favadd">收藏此点</button>
-  <button id="favlistbtn">我的收藏</button>
-</div>
-<div class="results" id="favs"></div>
-<div class="toast" id="toast"></div>
+<a class="skip-link" href="#main">跳到主要内容</a>
+<header class="topbar">
+  <h1>定位选点</h1>
+  <form class="logout-form" method="post" action="/session/logout"><button id="logoutbtn" type="submit">退出登录</button></form>
+</header>
+<main class="shell" id="main">
+  <form class="bar" id="searchform" role="search">
+    <label class="sr-only" for="q">搜索地点</label>
+    <input id="q" type="search" autocomplete="off" placeholder="搜索地点（只预览，不会立即修改定位）">
+    <button id="locatebtn" type="button" disabled>当前位置</button>
+    <button id="btn" type="submit">搜索</button>
+  </form>
+  <section class="results" id="results" aria-label="搜索结果"></section>
+  <div id="map" role="region" aria-label="定位地图，可点击或使用键盘移动图钉" aria-busy="true" tabindex="0"></div>
+  <p id="info" role="status" aria-live="polite">加载中…</p>
+  <section class="opts" aria-labelledby="settings-title">
+    <h2 id="settings-title">定位参数</h2>
+    <label for="alt">海拔（米）<input id="alt" type="number" inputmode="numeric" min="-12000" max="100000"></label>
+    <label for="hacc">水平精度<input id="hacc" type="number" inputmode="numeric" min="0" max="100000"></label>
+    <label for="vacc">垂直精度<input id="vacc" type="number" inputmode="numeric" min="0" max="100000"></label>
+    <button id="savebtn" type="button">保存定位</button>
+    <button id="restorebtn" type="button">恢复真实定位</button>
+    <button id="favadd" type="button">收藏此点</button>
+    <button id="favlistbtn" type="button">我的收藏</button>
+  </section>
+  <section class="results" id="favs" aria-label="收藏地点"></section>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
 <script nonce="__CSP_NONCE__">
 
@@ -606,9 +663,10 @@ var WGS = {lat:0, lng:0};   // 当前“定位点(图钉)”的真值 WGS-84（�
 var datum = "gcj";          // 当前底图坐标系：'gcj'(高德) 或 'wgs'(OSM)
 var saved = true;           // 图钉当前位置是否已保存到设备
 var enabledState = true;    // true=伪造中；false=已恢复真实定位（脚本放行）
+var toastTimer;
 
 function $(id){return document.getElementById(id);}
-function toast(t){var e=$("toast");e.textContent=t;e.classList.add("show");setTimeout(function(){e.classList.remove("show");},1800);}
+function toast(t){var e=$("toast");clearTimeout(toastTimer);e.textContent=t;e.classList.add("show");toastTimer=setTimeout(function(){e.classList.remove("show");},2200);}
 function numOrNull(id){var v=$(id).value.trim();return v===""?null:Number(v);}
 function wrapLng(lng){return ((((Number(lng)+180)%360)+360)%360)-180;}
 
@@ -659,8 +717,9 @@ function renderFavs(){
   list.forEach(function(it,idx){
     var row=document.createElement("div");
     row.className="rrow";
-    var name=document.createElement("span");
+    var name=document.createElement("button");
     name.className="fname";
+    name.type="button";
     name.textContent=it.name||(Number(it.lat).toFixed(4)+","+Number(it.lng).toFixed(4));
     name.addEventListener("click",function(){
       $("results").classList.remove("show");
@@ -769,6 +828,10 @@ function movePin(dispLat,dispLng){
 
 // 保存定位点到设备（写入 loc.json，Shadowrocket 才会用）
 function commit(){
+  if(!$("alt").checkValidity()||!$("hacc").checkValidity()||!$("vacc").checkValidity()){
+    toast("请输入有效范围内的海拔和精度");
+    return;
+  }
   var payload={lat:WGS.lat, lng:WGS.lng,
     altitude:numOrNull("alt"), horizontalAccuracy:numOrNull("hacc"), verticalAccuracy:numOrNull("vacc")};
   fetch("/set",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
@@ -827,8 +890,9 @@ function search(){
       var box=$("results"); box.innerHTML="";
       if(!a||!a.length){ box.classList.remove("show"); toast("没找到"); return; }
       a.forEach(function(it){
-        var row=document.createElement("div");
+        var row=document.createElement("button");
         row.className="rrow";
+        row.type="button";
         row.textContent=it.display_name;
         row.addEventListener("click",function(){
           box.classList.remove("show"); box.innerHTML="";
@@ -871,15 +935,15 @@ function load(){
     marker=L.marker(dispPos(),{draggable:true}).addTo(map);
     updateEnabledUI();
     setLocateBusy(false);
+    $("map").setAttribute("aria-busy","false");
 
     map.on("baselayerchange",function(e){datum=e.layer.datum||"wgs"; var p=dispPos(); marker.setLatLng(p); map.setView(p,map.getZoom()); info();});
     map.on("click",function(e){movePin(e.latlng.lat,e.latlng.lng);});
     marker.on("dragend",function(){var p=marker.getLatLng(); movePin(p.lat,p.lng);});
-  }).catch(function(){$("info").textContent="加载失败，检查 token 是否正确";});
+  }).catch(function(){$("map").setAttribute("aria-busy","false");$("info").setAttribute("role","alert");$("info").textContent="加载失败，请刷新页面或重新登录";});
 }
 
-$("btn").addEventListener("click",search);
-$("q").addEventListener("keydown",function(e){if(e.key==="Enter")search();});
+$("searchform").addEventListener("submit",function(e){e.preventDefault();search();});
 $("locatebtn").addEventListener("click",locateCurrent);
 $("savebtn").addEventListener("click",commit);
 $("restorebtn").addEventListener("click",toggleEnabled);
