@@ -244,20 +244,29 @@ function recordLoginFailure(req) {
 }
 
 function forwardedValue(req, name) {
-  return String(req.headers[name] || "").split(",")[0].trim();
+  return String(req.headers[name] || "").split(",").at(-1).trim();
+}
+
+function forwardedRequestOrigin(req) {
+  if (!TRUST_PROXY) return "";
+  const protocol = forwardedValue(req, "x-forwarded-proto");
+  const host = forwardedValue(req, "x-forwarded-host") || String(req.headers.host || "").trim();
+  return protocol && host ? normalizeOrigin(protocol + "://" + host) : "";
+}
+
+function directRequestOrigin(req) {
+  const directProtocol = req.socket.encrypted ? "https" : "http";
+  const host = String(req.headers.host || "").trim();
+  return host ? normalizeOrigin(directProtocol + "://" + host) : "";
 }
 
 function requestOrigin(req) {
-  if (PUBLIC_ORIGIN) return PUBLIC_ORIGIN;
-  const directProtocol = req.socket.encrypted ? "https" : "http";
-  const protocol = TRUST_PROXY ? forwardedValue(req, "x-forwarded-proto") || directProtocol : directProtocol;
-  const host = TRUST_PROXY ? forwardedValue(req, "x-forwarded-host") || req.headers.host : req.headers.host;
-  return protocol && host ? protocol + "://" + host : "";
+  return forwardedRequestOrigin(req) || PUBLIC_ORIGIN || directRequestOrigin(req);
 }
 
 function validWriteOrigin(req) {
   if (bearerToken(req)) return true;
-  const origin = String(req.headers.origin || "");
+  const origin = normalizeOrigin(String(req.headers.origin || ""));
   return origin !== "" && safeEqual(origin, requestOrigin(req));
 }
 

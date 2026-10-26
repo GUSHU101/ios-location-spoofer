@@ -49,7 +49,7 @@ SESSION_TTL=43200
 
 1. 两个 `SERVICE_HEX_64_*` 值均为 64 字符。
 2. 两个值不相同。
-3. `SERVICE_URL_LOCATION_PICKER_8080` 是最终要访问的 HTTPS 来源，不带额外路径。
+3. `SERVICE_URL_LOCATION_PICKER_8080` 是 Coolify 生成的 HTTPS 来源，不带额外路径；后续可以再绑定自定义域名。
 
 Compose 会把这些值分别映射为容器内的 `TOKEN`、`READ_TOKEN` 和 `PUBLIC_ORIGIN`。不要手动新增同名的容器变量来覆盖它们。
 
@@ -62,7 +62,7 @@ Compose 会把这些值分别映射为容器内的 `TOKEN`、`READ_TOKEN` 和 `P
 1. 在应用 Domains 中选择服务 `location-picker`。
 2. 设置 HTTPS 域名，例如 `https://picker.example.com`。
 3. 内部端口填写 `8080`。
-4. 保存并重新部署，使 `PUBLIC_ORIGIN` 与最终域名一致。
+4. 保存并重新部署。应用会从 Coolify 的受信任代理头识别当前访问域名。
 
 不要添加宿主机端口映射，也不要在容器内配置 `CERT` / `KEY`。TLS 由 Coolify 统一终止。
 
@@ -117,9 +117,9 @@ https://picker.example.com/loc.json?token=<SERVICE_HEX_64_LOCATIONPICKERREAD>
 
 查看启动日志。常见原因是管理密钥或只读密钥缺失、短于 32 字符，或者两个密钥相同。修正变量并重新部署，不要在日志截图中泄露变量值。
 
-### 登录后保存返回来源错误
+### 退出、保存或恢复定位返回 `invalid request origin`
 
-管理页面的公开域名必须与 `PUBLIC_ORIGIN` 完全一致，包括 `https://`、域名和非默认端口。更新 Domains 后重新部署，让 `SERVICE_URL_LOCATION_PICKER_8080` 重新注入。
+拉取仓库最新提交并重新部署。旧版本始终使用 Coolify 首次生成的 `PUBLIC_ORIGIN`，绑定自定义域名后会误判来源；新版本会在启用 `TRUST_PROXY=1` 时使用 Coolify 转发的当前协议与域名，同时继续拒绝跨域写请求。
 
 ### `/loc.json` 返回 `401` 或 `403`
 

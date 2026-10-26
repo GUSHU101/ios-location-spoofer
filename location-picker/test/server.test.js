@@ -13,6 +13,12 @@ const proxyHeaders = {
   "X-Forwarded-Host": "picker.example",
   "X-Forwarded-Proto": "https"
 };
+const customProxyOrigin = "https://ios.caseora.test";
+const customProxyHeaders = {
+  "X-Forwarded-For": "198.51.100.7, 203.0.113.15",
+  "X-Forwarded-Host": "generated.example, ios.caseora.test",
+  "X-Forwarded-Proto": "http, https"
+};
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "location-picker-test-"));
 const dataFile = path.join(temporaryDirectory, "loc.json");
 let child;
@@ -215,8 +221,8 @@ test("health, scoped authentication, clean browser sessions and persistence work
     redirect: "manual",
     headers: {
       Cookie: sessionCookie,
-      Origin: proxyOrigin,
-      ...proxyHeaders
+      Origin: customProxyOrigin,
+      ...customProxyHeaders
     }
   });
   assert.equal(logout.status, 303);
