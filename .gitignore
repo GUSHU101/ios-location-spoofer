@@ -1,0 +1,4 @@
+.env
+.DS_Store
+location-picker/loc.json
+location-picker/loc.json.*.tmp

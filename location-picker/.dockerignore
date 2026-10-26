@@ -2,3 +2,7 @@ worker/
 cloudflare-webui/
 .git/
 *.md
+test/
+.env
+loc.json
+docker-compose.yml

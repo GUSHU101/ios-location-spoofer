@@ -1,6 +1,6 @@
 # Location Picker — Cloudflare Worker
 
-与 `../server.js` API 完全兼容，免 VPS、自带 HTTPS，支持 **Loon / Shadowrocket / Surge** 的 `configUrl`。
+坐标 JSON 格式与 `../server.js` 兼容，免 VPS、自带 HTTPS，支持 **Loon / Shadowrocket / Surge** 的 `configUrl`。Worker 仍使用原有单 `TOKEN` URL 鉴权；Node/Coolify 版则使用独立的管理密钥、只读密钥与浏览器会话。
 
 ## 接口
 

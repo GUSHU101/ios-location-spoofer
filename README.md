@@ -112,7 +112,7 @@ location-picker/worker/             # Cloudflare Worker 版（免 VPS，支持 L
 | **Cloudflare Worker — Wrangler CLI**（推荐） | [`location-picker/worker/`](location-picker/worker/) | 免 VPS、自带 HTTPS；熟悉命令行 |
 | **Cloudflare Worker — 网页后台** | [`location-picker/cloudflare-webui/`](location-picker/cloudflare-webui/) | 免 VPS、自带 HTTPS；不想装 npm / Wrangler，复制单文件即可 |
 | Node 自托管 | [`location-picker/server.js`](location-picker/server.js) | 有自己的 VPS / NAS |
-| Docker | [`location-picker/Dockerfile`](location-picker/Dockerfile) | 有 Docker 环境 |
+| Docker / Coolify | [`docker-compose.yml`](docker-compose.yml) | 自托管、持久化和自动健康检查 |
 
 Loon 插件 **远程配置 URL** 示例：
 
@@ -126,12 +126,17 @@ https://你的worker.workers.dev/loc.json?token=你的TOKEN
 
 ## location-picker 服务端配置
 
-`location-picker/server.js` 通过环境变量控制，**`TOKEN` 不设进程会直接退出，不会用弱口令兜底**。
+`location-picker/server.js` 通过环境变量控制。管理密钥与模块只读密钥均不得少于 32 个字符；缺失或过短时进程会直接退出。
 
 | 变量 | 是否必设 | 默认值 | 说明 |
 |------|---------|--------|------|
-| `TOKEN` | **必设** | 无 | 访问口令和 Shadowrocket 模块 `argument=` 末尾的 `configUrl` 里的 `token=` 必须一致。建议 `openssl rand -hex 24` 生成 |
+| `TOKEN` | **必设** | 无 | 管理密钥，仅用于首次登录管理页面或 Bearer 管理 API。建议 `openssl rand -hex 32` 生成 |
+| `READ_TOKEN` | **必设（生产）** | `TOKEN` | 模块读取 `/loc.json` 的独立只读密钥。生产环境必须与 `TOKEN` 不同 |
 | `PORT` | 否 | `8080` | 监听端口；1024 以下需 root |
+| `HOST` | 否 | `0.0.0.0` | 监听地址 |
+| `DATA_FILE` | 否 | `location-picker/loc.json` | 坐标数据文件；容器默认 `/data/loc.json` |
+| `TRUST_PROXY` | 否 | `0` | 仅在 Coolify 等可信反向代理后设置为 `1` |
+| `SESSION_TTL` | 否 | `43200` | 管理页面会话秒数，范围 300–86400 |
 | `CERT` | 否 | 空 | HTTPS 证书 fullchain 路径；与 `KEY` 同时设置才走 https |
 | `KEY` | 否 | 空 | HTTPS 私钥路径；与 `CERT` 同时设置才走 https |
 
@@ -139,16 +144,16 @@ https://你的worker.workers.dev/loc.json?token=你的TOKEN
 
 ```bash
 # http（最简，先跑通流程再用 https）
-TOKEN=$(openssl rand -hex 24) PORT=8080 node server.js
+TOKEN=$(openssl rand -hex 32) READ_TOKEN=$(openssl rand -hex 32) PORT=8080 node server.js
 
 # https（复用 acme.sh 证书；续期无需重启，进程每 12 小时自动热加载）
-TOKEN=$(openssl rand -hex 24) PORT=8443 \
+TOKEN=$(openssl rand -hex 32) READ_TOKEN=$(openssl rand -hex 32) PORT=8443 \
 CERT=/root/cert/example.com/fullchain.pem \
 KEY=/root/cert/example.com/privkey.pem \
 node server.js
 ```
 
-数据文件 `loc.json` 自动落在 `server.js` 同目录，记录当前坐标 / 海拔 / 精度；已在 `.gitignore` 中忽略，不会被误提交进仓库。
+数据文件 `loc.json` 使用临时文件、`fsync` 和原子替换保存，降低进程或主机异常中断导致配置损坏的风险；文件已在 `.gitignore` 中忽略。
 
 > ⚠️ **不要把 `TOKEN` 写在命令行历史里**——推荐用 systemd 的 `Environment=` 或 `.env` + `direnv`，避免 `history` / `ps aux` 泄露。
 
@@ -156,8 +161,12 @@ node server.js
 
 ```bash
 cd location-picker
-echo "TOKEN=$(openssl rand -hex 24)" > .env
+printf "TOKEN=%s\nREAD_TOKEN=%s\n" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
 docker compose up -d
 ```
 
-镜像基于 `node:22-alpine`，数据卷挂载到当前目录，设 `restart: unless-stopped`。
+镜像基于 `node:22-alpine`，以非 root 用户和只读根文件系统运行；坐标保存在命名卷中。
+
+### Coolify
+
+Coolify 可直接从仓库根目录的 [`docker-compose.yml`](docker-compose.yml) 部署。完整步骤、域名端口、密钥和备份说明见 [`COOLIFY.md`](COOLIFY.md)。

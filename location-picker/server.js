@@ -5,19 +5,19 @@
 // 可选自带 https（复用 3x-ui 的 acme.sh 证书）
 //
 // 启动示例（http）：
-//   TOKEN=你的密码 PORT=8080 node server.js
+//   TOKEN=管理密钥 READ_TOKEN=只读密钥 PORT=8080 node server.js
 //
 // 启动示例（https，复用已有证书）：
-//   TOKEN=你的密码 PORT=8443 \
+//   TOKEN=管理密钥 READ_TOKEN=只读密钥 PORT=8443 \
 //   CERT=/root/cert/你的域名/fullchain.pem \
 //   KEY=/root/cert/你的域名/privkey.pem \
 //   node server.js
 //
 // Shadowrocket 模块 argument 末尾加：
-//   &configUrl=https://你的域名:8443/loc.json?token=你的密码
+//   &configUrl=https://你的域名:8443/loc.json?token=你的只读密钥
 //
-// 注意：URL 必须带 ?token=<TOKEN>。缺 token → 服务端返回 401 + "missing token"；
-// token 错 → 返回 403 + "bad token"。网页端点同样适用。
+// 模块读取地址使用 READ_TOKEN。管理页面通过 POST 登录表单换取 HttpOnly 会话
+// Cookie，避免管理密钥进入 URL、浏览器脚本和后续请求。
 
 const http = require("http");
 const https = require("https");
@@ -25,19 +25,35 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = process.env.PORT || 8080;
-// TOKEN 必设：不设直接退出，绝不用弱口令兜底（否则任何人都能读写你的定位）
-const TOKEN = process.env.TOKEN || "";
-if (!TOKEN) {
-  console.error(
-    "启动失败：未设置 TOKEN 环境变量。请用随机字符串启动，例如：\n" +
-    "  TOKEN=$(openssl rand -hex 24) PORT=8080 node server.js"
-  );
+const PORT = Number.parseInt(process.env.PORT || "8080", 10);
+const HOST = process.env.HOST || "0.0.0.0";
+const TOKEN = String(process.env.TOKEN || "");
+const READ_TOKEN = String(process.env.READ_TOKEN || TOKEN);
+const CERT = process.env.CERT || "";
+const KEY = process.env.KEY || "";
+const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "loc.json");
+const TRUST_PROXY = process.env.TRUST_PROXY === "1";
+const SESSION_TTL = Math.max(300, Math.min(86400, Number.parseInt(process.env.SESSION_TTL || "43200", 10) || 43200));
+const COOKIE_NAME = "location_picker_session";
+const MAX_BODY_BYTES = 10 * 1024;
+const authFailures = new Map();
+
+if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65535) {
+  console.error("启动失败：PORT 必须是 0 到 65535 之间的整数。");
   process.exit(1);
 }
-const CERT = process.env.CERT || "";                   // https 证书 fullchain 路径（留空=http）
-const KEY = process.env.KEY || "";                     // https 私钥路径
-const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "loc.json");
+if (Buffer.byteLength(TOKEN) < 32 || Buffer.byteLength(READ_TOKEN) < 32) {
+  console.error("启动失败：TOKEN 和 READ_TOKEN 必须分别至少包含 32 个字符。");
+  process.exit(1);
+}
+if (process.env.NODE_ENV === "production" && safeEqual(TOKEN, READ_TOKEN)) {
+  console.error("启动失败：生产环境的 READ_TOKEN 必须与 TOKEN 不同。");
+  process.exit(1);
+}
+if ((CERT && !KEY) || (!CERT && KEY)) {
+  console.error("启动失败：CERT 与 KEY 必须同时设置，或同时留空交给反向代理终止 HTTPS。");
+  process.exit(1);
+}
 
 // 常量时间比较，避免通过响应时延逐字节爆破 token
 function safeEqual(a, b) {
@@ -50,129 +66,360 @@ function safeEqual(a, b) {
 }
 
 // 字段名/默认值与 location-spoofer.js 的 DEFAULT_CONFIG 对齐
-const DEFAULT = {
+const DEFAULT = Object.freeze({
   enabled: true,          // false = 脚本放行原始响应（恢复真实定位）
   latitude: 37.3349,
   longitude: -122.00902,
   altitude: 530,
   horizontalAccuracy: 39,
   verticalAccuracy: 1000
-};
+});
+
+function finiteInRange(value, minimum, maximum, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= minimum && number <= maximum ? number : fallback;
+}
+
+function normalizeLoc(value) {
+  const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    enabled: input.enabled !== false,
+    latitude: finiteInRange(input.latitude, -90, 90, DEFAULT.latitude),
+    longitude: finiteInRange(input.longitude, -180, 180, DEFAULT.longitude),
+    altitude: Math.round(finiteInRange(input.altitude, -12000, 100000, DEFAULT.altitude)),
+    horizontalAccuracy: Math.round(finiteInRange(input.horizontalAccuracy, 0, 100000, DEFAULT.horizontalAccuracy)),
+    verticalAccuracy: Math.round(finiteInRange(input.verticalAccuracy, 0, 100000, DEFAULT.verticalAccuracy))
+  };
+}
+
+function ensureDataDirectory() {
+  fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true, mode: 0o700 });
+}
 
 function readLoc() {
   try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    return normalizeLoc(JSON.parse(fs.readFileSync(DATA_FILE, "utf8")));
   } catch (e) {
     return Object.assign({}, DEFAULT);
   }
 }
 
 function writeLoc(obj) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(obj, null, 2));
+  ensureDataDirectory();
+  const next = normalizeLoc(obj);
+  const temporary = DATA_FILE + "." + process.pid + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
+  let descriptor;
+  try {
+    descriptor = fs.openSync(temporary, "wx", 0o600);
+    fs.writeFileSync(descriptor, JSON.stringify(next, null, 2) + "\n", "utf8");
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    fs.renameSync(temporary, DATA_FILE);
+    fs.chmodSync(DATA_FILE, 0o600);
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+    try { fs.unlinkSync(temporary); } catch (e) {}
+  }
+  return next;
 }
 
-function send(res, code, type, body) {
-  res.writeHead(code, {
+function send(res, code, type, body, extraHeaders) {
+  const headers = Object.assign({
     "Content-Type": type,
-    "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "no-store"
-  });
+    "Cache-Control": "no-store, private",
+    "Content-Length": Buffer.byteLength(body),
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY"
+  }, extraHeaders || {});
+  res.writeHead(code, headers);
   res.end(body);
 }
 
-// 区分「没传 token」和「token 传错」：前者 401 引导补 ?token=，后者 403
-function checkToken(token, res) {
-  if (token == null || token === "") {
-    send(res, 401, "application/json", '{"error":"missing token","hint":"add ?token=<TOKEN> to the URL (must match the TOKEN env var)"}');
-    return false;
+function sendJson(res, code, value, extraHeaders) {
+  send(res, code, "application/json; charset=utf-8", JSON.stringify(value), extraHeaders);
+}
+
+function bearerToken(req) {
+  const authorization = String(req.headers.authorization || "");
+  return authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+}
+
+function cookies(req) {
+  return String(req.headers.cookie || "").split(";").reduce(function (all, entry) {
+    const index = entry.indexOf("=");
+    if (index > 0) all[entry.slice(0, index).trim()] = entry.slice(index + 1).trim();
+    return all;
+  }, {});
+}
+
+function sessionSignature(issuedAt) {
+  return crypto.createHmac("sha256", TOKEN).update("location-picker-ui-v1|" + issuedAt).digest("base64url");
+}
+
+function createSessionValue() {
+  const issuedAt = String(Math.floor(Date.now() / 1000));
+  return issuedAt + "." + sessionSignature(issuedAt);
+}
+
+function hasValidSession(req) {
+  const value = cookies(req)[COOKIE_NAME] || "";
+  const parts = value.split(".");
+  if (parts.length !== 2 || !/^\d{10}$/.test(parts[0]) || !safeEqual(parts[1], sessionSignature(parts[0]))) return false;
+  const age = Math.floor(Date.now() / 1000) - Number(parts[0]);
+  return age >= 0 && age <= SESSION_TTL;
+}
+
+function isAdminRequest(req, url, allowQuery) {
+  if (hasValidSession(req)) return true;
+  const supplied = bearerToken(req) || (allowQuery ? url.searchParams.get("token") || "" : "");
+  return supplied !== "" && safeEqual(supplied, TOKEN);
+}
+
+function isReadRequest(req, url) {
+  if (hasValidSession(req)) return true;
+  const supplied = bearerToken(req) || url.searchParams.get("token") || "";
+  return supplied !== "" && (safeEqual(supplied, READ_TOKEN) || safeEqual(supplied, TOKEN));
+}
+
+function rejectAuth(res) {
+  sendJson(res, 401, { error: "authentication required" }, { "WWW-Authenticate": 'Bearer realm="location-picker"' });
+}
+
+function clientAddress(req) {
+  if (TRUST_PROXY) {
+    // The trusted edge appends the actual peer address. Reading from the right
+    // prevents a client-supplied first value from bypassing login throttling.
+    const forwarded = String(req.headers["x-forwarded-for"] || "").split(",").at(-1).trim();
+    if (forwarded) return forwarded;
   }
-  if (!safeEqual(token, TOKEN)) {
-    send(res, 403, "application/json", '{"error":"bad token"}');
-    return false;
+  return String(req.socket.remoteAddress || "unknown");
+}
+
+function loginBlocked(req) {
+  const entry = authFailures.get(clientAddress(req));
+  return entry && entry.blockedUntil > Date.now() ? Math.ceil((entry.blockedUntil - Date.now()) / 1000) : 0;
+}
+
+function recordLoginFailure(req) {
+  const key = clientAddress(req);
+  const now = Date.now();
+  const previous = authFailures.get(key);
+  const entry = !previous || now - previous.firstAttempt > 10 * 60 * 1000
+    ? { count: 1, firstAttempt: now, blockedUntil: 0 }
+    : { count: previous.count + 1, firstAttempt: previous.firstAttempt, blockedUntil: previous.blockedUntil };
+  if (entry.count >= 5) entry.blockedUntil = now + 15 * 60 * 1000;
+  authFailures.set(key, entry);
+  if (authFailures.size > 10000) {
+    for (const [address, value] of authFailures) {
+      if (now - value.firstAttempt > 30 * 60 * 1000) authFailures.delete(address);
+    }
   }
-  return true;
+}
+
+function forwardedValue(req, name) {
+  return String(req.headers[name] || "").split(",")[0].trim();
+}
+
+function requestOrigin(req) {
+  const directProtocol = req.socket.encrypted ? "https" : "http";
+  const protocol = TRUST_PROXY ? forwardedValue(req, "x-forwarded-proto") || directProtocol : directProtocol;
+  const host = TRUST_PROXY ? forwardedValue(req, "x-forwarded-host") || req.headers.host : req.headers.host;
+  return protocol && host ? protocol + "://" + host : "";
+}
+
+function validWriteOrigin(req) {
+  if (bearerToken(req)) return true;
+  const origin = String(req.headers.origin || "");
+  return origin !== "" && safeEqual(origin, requestOrigin(req));
+}
+
+function sessionCookie(req) {
+  const secure = requestOrigin(req).startsWith("https://");
+  return COOKIE_NAME + "=" + createSessionValue() + "; Path=/; Max-Age=" + SESSION_TTL + "; HttpOnly; SameSite=Strict" + (secure ? "; Secure" : "");
+}
+
+function readJson(req, res, callback) {
+  if (!String(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) {
+    sendJson(res, 415, { error: "content type must be application/json" });
+    return;
+  }
+  let body = "";
+  let oversized = false;
+  req.setEncoding("utf8");
+  req.on("data", function (chunk) {
+    if (oversized) return;
+    body += chunk;
+    if (Buffer.byteLength(body) > MAX_BODY_BYTES) oversized = true;
+  });
+  req.on("end", function () {
+    if (oversized) return sendJson(res, 413, { error: "request body too large" });
+    let value;
+    try {
+      value = JSON.parse(body);
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("bad json");
+    } catch (e) {
+      return sendJson(res, 400, { error: "bad json" });
+    }
+    try {
+      callback(value);
+    } catch (e) {
+      console.error("请求处理失败：" + e.message);
+      if (!res.headersSent) sendJson(res, 500, { error: "storage unavailable" });
+    }
+  });
+  req.on("error", function () {
+    if (!res.headersSent) sendJson(res, 400, { error: "request interrupted" });
+  });
+}
+
+function readForm(req, res, callback) {
+  if (!String(req.headers["content-type"] || "").toLowerCase().startsWith("application/x-www-form-urlencoded")) {
+    sendJson(res, 415, { error: "content type must be application/x-www-form-urlencoded" });
+    return;
+  }
+  let body = "";
+  let oversized = false;
+  req.setEncoding("utf8");
+  req.on("data", function (chunk) {
+    if (oversized) return;
+    body += chunk;
+    if (Buffer.byteLength(body) > MAX_BODY_BYTES) oversized = true;
+  });
+  req.on("end", function () {
+    if (oversized) return sendJson(res, 413, { error: "request body too large" });
+    callback(new URLSearchParams(body));
+  });
+  req.on("error", function () {
+    if (!res.headersSent) sendJson(res, 400, { error: "request interrupted" });
+  });
+}
+
+function renderPage() {
+  const nonce = crypto.randomBytes(18).toString("base64");
+  return {
+    nonce: nonce,
+    body: PAGE.replaceAll("__CSP_NONCE__", nonce)
+  };
+}
+
+function renderLogin(error) {
+  const nonce = crypto.randomBytes(18).toString("base64");
+  return {
+    nonce: nonce,
+    body: LOGIN_PAGE
+      .replaceAll("__CSP_NONCE__", nonce)
+      .replace("__LOGIN_ERROR__", error ? '<p class="error" role="alert">密钥错误，请重试。</p>' : "")
+  };
+}
+
+function pageCsp(nonce) {
+  return "default-src 'none'; base-uri 'none'; connect-src 'self' https://api.open-meteo.com https://nominatim.openstreetmap.org; " +
+    "font-src 'self'; frame-ancestors 'none'; img-src 'self' data: blob: https://unpkg.com https://*.autonavi.com https://*.openstreetmap.org; " +
+    "object-src 'none'; script-src 'nonce-" + nonce + "' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com";
 }
 
 function handler(req, res) {
-  const url = new URL(req.url, "http://" + (req.headers.host || "localhost"));
-  const token = url.searchParams.get("token");
+  let url;
+  try {
+    url = new URL(req.url, "http://localhost");
+  } catch (e) {
+    return sendJson(res, 400, { error: "bad request target" });
+  }
 
-  // ---- Shadowrocket 读取坐标（存的就是 WGS-84，Apple 需要的格式） ----
+  if (url.pathname === "/healthz" && req.method === "GET") {
+    try {
+      ensureDataDirectory();
+      fs.accessSync(path.dirname(DATA_FILE), fs.constants.R_OK | fs.constants.W_OK);
+      return sendJson(res, 200, { status: "ok" });
+    } catch (e) {
+      return sendJson(res, 503, { status: "unavailable" });
+    }
+  }
+
   if (url.pathname === "/loc.json" && req.method === "GET") {
-    if (!checkToken(token, res)) return;
-    return send(res, 200, "application/json", JSON.stringify(readLoc()));
+    if (!isReadRequest(req, url)) return rejectAuth(res);
+    return sendJson(res, 200, readLoc());
   }
 
-  // ---- 网页保存（前端已转好 WGS-84 再发过来；海拔/精度可选） ----
   if (url.pathname === "/set" && req.method === "POST") {
-    if (!checkToken(token, res)) return;
-    let body = "";
-    req.on("data", function (c) {
-      body += c;
-      if (body.length > 1e4) req.destroy();
-    });
-    req.on("end", function () {
-      try {
-        const j = JSON.parse(body);
-        const la = Number(j.lat);
-        const lo = Number(j.lng);
-        if (
-          !isFinite(la) || !isFinite(lo) ||
-          la < -90 || la > 90 || lo < -180 || lo > 180
-        ) {
-          return send(res, 400, "application/json", '{"error":"bad coords"}');
-        }
-        const cur = readLoc();
-        cur.enabled = true; // 保存一个新位置 = 开启伪造
-        cur.latitude = la;
-        cur.longitude = lo;
-        // 海拔/精度：脚本里都会被 Math.trunc 成整数，这里取整存
-        function setInt(key, v) {
-          if (v !== undefined && v !== null && v !== "" && isFinite(Number(v))) {
-            cur[key] = Math.round(Number(v));
-          }
-        }
-        setInt("altitude", j.altitude);
-        setInt("horizontalAccuracy", j.horizontalAccuracy);
-        setInt("verticalAccuracy", j.verticalAccuracy);
-        writeLoc(cur);
-        return send(res, 200, "application/json", JSON.stringify(cur));
-      } catch (e) {
-        return send(res, 400, "application/json", '{"error":"bad json"}');
+    if (!isAdminRequest(req, url, false)) return rejectAuth(res);
+    if (!validWriteOrigin(req)) return sendJson(res, 403, { error: "invalid request origin" });
+    readJson(req, res, function (value) {
+      const latitude = Number(value.lat);
+      const longitude = Number(value.lng);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        return sendJson(res, 400, { error: "bad coords" });
       }
+      const current = readLoc();
+      current.enabled = true;
+      current.latitude = latitude;
+      current.longitude = longitude;
+      if (value.altitude !== undefined && value.altitude !== null && value.altitude !== "") {
+        current.altitude = Math.round(finiteInRange(value.altitude, -12000, 100000, current.altitude));
+      }
+      if (value.horizontalAccuracy !== undefined && value.horizontalAccuracy !== null && value.horizontalAccuracy !== "") {
+        current.horizontalAccuracy = Math.round(finiteInRange(value.horizontalAccuracy, 0, 100000, current.horizontalAccuracy));
+      }
+      if (value.verticalAccuracy !== undefined && value.verticalAccuracy !== null && value.verticalAccuracy !== "") {
+        current.verticalAccuracy = Math.round(finiteInRange(value.verticalAccuracy, 0, 100000, current.verticalAccuracy));
+      }
+      return sendJson(res, 200, writeLoc(current));
     });
     return;
   }
 
-  // ---- 一键切换：伪造 / 恢复真实定位 ----
   if (url.pathname === "/enable" && req.method === "POST") {
-    if (!checkToken(token, res)) return;
-    let body = "";
-    req.on("data", function (c) {
-      body += c;
-      if (body.length > 1e4) req.destroy();
-    });
-    req.on("end", function () {
-      try {
-        const j = JSON.parse(body);
-        const cur = readLoc();
-        cur.enabled = j.enabled !== false; // false=恢复真实定位（脚本放行）
-        writeLoc(cur);
-        return send(res, 200, "application/json", JSON.stringify(cur));
-      } catch (e) {
-        return send(res, 400, "application/json", '{"error":"bad json"}');
-      }
+    if (!isAdminRequest(req, url, false)) return rejectAuth(res);
+    if (!validWriteOrigin(req)) return sendJson(res, 403, { error: "invalid request origin" });
+    readJson(req, res, function (value) {
+      if (typeof value.enabled !== "boolean") return sendJson(res, 400, { error: "enabled must be a boolean" });
+      const current = readLoc();
+      current.enabled = value.enabled;
+      return sendJson(res, 200, writeLoc(current));
     });
     return;
   }
 
-  // ---- 地图网页（与 Worker 版一致，必须带正确 token） ----
-  if (url.pathname === "/" && req.method === "GET") {
-    if (!checkToken(token, res)) return;
-    return send(res, 200, "text/html; charset=utf-8", PAGE);
+  if (url.pathname === "/session" && req.method === "POST") {
+    const retryAfter = loginBlocked(req);
+    if (retryAfter > 0) return sendJson(res, 429, { error: "too many login attempts" }, { "Retry-After": String(retryAfter) });
+    readForm(req, res, function (form) {
+      const supplied = form.get("token") || "";
+      if (!safeEqual(supplied, TOKEN)) {
+        recordLoginFailure(req);
+        const login = renderLogin(true);
+        return send(res, 401, "text/html; charset=utf-8", login.body, {
+          "Content-Security-Policy": "default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; style-src 'nonce-" + login.nonce + "'"
+        });
+      }
+      authFailures.delete(clientAddress(req));
+      return send(res, 303, "text/plain; charset=utf-8", "redirecting", {
+        "Location": "/",
+        "Set-Cookie": sessionCookie(req)
+      });
+    });
+    return;
   }
 
-  return send(res, 404, "text/plain", "not found");
+  if (url.pathname === "/" && req.method === "GET") {
+    if (!hasValidSession(req)) {
+      const login = renderLogin(false);
+      return send(res, 200, "text/html; charset=utf-8", login.body, {
+        "Content-Security-Policy": "default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; style-src 'nonce-" + login.nonce + "'"
+      });
+    }
+    const page = renderPage();
+    return send(res, 200, "text/html; charset=utf-8", page.body, {
+      "Content-Security-Policy": pageCsp(page.nonce)
+    });
+  }
+
+  return sendJson(res, 404, { error: "not found" });
 }
 
 // ---- 启动：有证书走 https，否则 http ----
@@ -188,44 +435,89 @@ function onListenError(err) {
 }
 
 function start() {
+  ensureDataDirectory();
+  let server;
   if (CERT && KEY) {
     try {
       const opts = { cert: fs.readFileSync(CERT), key: fs.readFileSync(KEY) };
-      const server = https.createServer(opts, handler);
-      server.on("error", onListenError);
-      // acme.sh 续期后无需重启：每 12 小时热加载一次证书
+      server = https.createServer(opts, handler);
       setInterval(function () {
         try {
           server.setSecureContext({ cert: fs.readFileSync(CERT), key: fs.readFileSync(KEY) });
         } catch (e) {
-          console.log("cert reload failed: " + e.message);
+          console.error("证书热加载失败：" + e.message);
         }
-      }, 12 * 3600 * 1000);
-      server.listen(PORT, function () {
-        console.log("location picker (https) listening on :" + PORT);
-      });
-      return;
+      }, 12 * 3600 * 1000).unref();
     } catch (e) {
-      console.log("https 启动失败（证书读取失败），回退到 http：" + e.message);
+      console.error("启动失败：无法读取 HTTPS 证书：" + e.message);
+      process.exit(1);
     }
+  } else {
+    server = http.createServer(handler);
   }
-  const server = http.createServer(handler);
+
+  server.requestTimeout = 15000;
+  server.headersTimeout = 10000;
+  server.keepAliveTimeout = 5000;
+  server.maxHeadersCount = 64;
   server.on("error", onListenError);
-  server.listen(PORT, function () {
-    console.log("location picker (http) listening on :" + PORT);
+  server.listen(PORT, HOST, function () {
+    const address = server.address();
+    const port = address && typeof address === "object" ? address.port : PORT;
+    console.log("location picker (" + (CERT ? "https" : "http") + ") listening on " + HOST + ":" + port);
   });
+
+  function shutdown(signal) {
+    console.log(signal + " received; stopping location picker");
+    server.close(function () { process.exit(0); });
+    setTimeout(function () { process.exit(1); }, 10000).unref();
+  }
+  process.once("SIGTERM", function () { shutdown("SIGTERM"); });
+  process.once("SIGINT", function () { shutdown("SIGINT"); });
+
+  return server;
 }
 
-start();
+if (require.main === module) start();
+
+const LOGIN_PAGE = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>定位选点登录</title>
+<style nonce="__CSP_NONCE__">
+  :root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f7fb;color:#101828}
+  *{box-sizing:border-box}body{min-height:100vh;margin:0;display:grid;place-items:center;padding:24px}
+  main{width:min(100%,420px);padding:28px;border:1px solid #e4e7ec;border-radius:18px;background:#fff;box-shadow:0 18px 48px rgba(16,24,40,.1)}
+  h1{margin:0 0 8px;font-size:1.5rem}p{margin:0 0 20px;color:#667085;line-height:1.5}
+  label{display:block;margin-bottom:8px;font-weight:700}input{width:100%;min-height:48px;border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;font:inherit}
+  input:focus-visible{outline:3px solid #84adff;outline-offset:2px}button{width:100%;min-height:48px;margin-top:16px;border:0;border-radius:10px;background:#155eef;color:#fff;font:inherit;font-weight:750;cursor:pointer}
+  button:hover{background:#004eeb}.error{margin:0 0 16px;color:#b42318}
+</style>
+</head>
+<body>
+<main>
+  <h1>定位选点</h1>
+  <p>输入部署时配置的管理密钥。密钥只在本次登录请求中提交，不会写入页面 URL。</p>
+  __LOGIN_ERROR__
+  <form method="post" action="/session">
+    <label for="token">管理密钥</label>
+    <input id="token" name="token" type="password" minlength="32" required autocomplete="current-password" autofocus>
+    <button type="submit">安全登录</button>
+  </form>
+</main>
+</body>
+</html>`;
 
 const PAGE = `<!doctype html>
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>定位选点</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
+<style nonce="__CSP_NONCE__">
   html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
   .bar{padding:8px;display:flex;gap:6px;box-sizing:border-box}
   .bar input{flex:1;padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px}
@@ -272,9 +564,8 @@ const PAGE = `<!doctype html>
 </div>
 <div class="results" id="favs"></div>
 <div class="toast" id="toast"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-var token = new URLSearchParams(location.search).get("token") || "";
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+<script nonce="__CSP_NONCE__">
 
 // ---------- GCJ-02 <-> WGS-84 坐标转换（中国地图偏移修正） ----------
 var GCJ = (function(){
@@ -444,7 +735,7 @@ function updateEnabledUI(){
 // 一键切换 伪造/恢复真实
 function toggleEnabled(){
   var want = !enabledState;
-  fetch("/enable?token="+encodeURIComponent(token),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:want})})
+  fetch("/enable",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:want})})
     .then(function(r){
       if(r.ok){ enabledState=want; updateEnabledUI();
         toast(want ? "已开启伪造，记得关开定位生效" : "已恢复真实定位，记得关开定位生效"); }
@@ -480,7 +771,7 @@ function movePin(dispLat,dispLng){
 function commit(){
   var payload={lat:WGS.lat, lng:WGS.lng,
     altitude:numOrNull("alt"), horizontalAccuracy:numOrNull("hacc"), verticalAccuracy:numOrNull("vacc")};
-  fetch("/set?token="+encodeURIComponent(token),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+  fetch("/set",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
     .then(function(r){ if(r.ok){ saved=true; enabledState=true; updateEnabledUI(); toast("已保存 ✓ 记得关开定位生效"); } else { toast("保存失败 "+r.status); } })
     .catch(function(){ toast("网络错误"); });
 }
@@ -554,7 +845,7 @@ function search(){
 }
 
 function load(){
-  fetch("/loc.json?token="+encodeURIComponent(token)).then(function(r){return r.json();}).then(function(d){
+  fetch("/loc.json",{credentials:"same-origin"}).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}).then(function(d){
     WGS={lat:d.latitude, lng:d.longitude};
     saved=true;
     enabledState=(d.enabled!==false);

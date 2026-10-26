@@ -1,0 +1,13 @@
+{
+  "name": "ios-location-picker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Authenticated location picker for the iOS location spoofer modules",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
+}

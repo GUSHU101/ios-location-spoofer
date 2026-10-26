@@ -110,7 +110,7 @@ Change location often and tired of looking up coordinates by hand? The bundled [
 | **Cloudflare Worker — Wrangler CLI** (recommended) | [`location-picker/worker/`](location-picker/worker/) | No VPS, HTTPS included; comfortable with the CLI |
 | **Cloudflare Worker — dashboard** | [`location-picker/cloudflare-webui/`](location-picker/cloudflare-webui/) | No VPS, HTTPS included; no npm/Wrangler — paste a single file |
 | Self-hosted Node | [`location-picker/server.js`](location-picker/server.js) | You have your own VPS / NAS |
-| Docker | [`location-picker/Dockerfile`](location-picker/Dockerfile) | You have Docker |
+| Docker / Coolify | [`docker-compose.yml`](docker-compose.yml) | Self-hosting, persistence, and health checks |
 
 Loon plugin **remote config URL** example:
 
@@ -124,12 +124,17 @@ This project welcomes review and feedback from the LINUX DO community: [LINUX DO
 
 ## location-picker server configuration
 
-`location-picker/server.js` is controlled by environment variables. **If `TOKEN` is not set, the process exits immediately — it will never fall back to a weak default.**
+`location-picker/server.js` is controlled by environment variables. Both secrets must contain at least 32 characters; the process exits when either required value is missing or too short.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `TOKEN` | **Yes** | none | Access token. Must match the `token=` in the `configUrl` at the end of the proxy module's `argument=`. Generate one with `openssl rand -hex 24`. |
+| `TOKEN` | **Yes** | none | Admin secret for the initial browser login or Bearer admin API. Generate it with `openssl rand -hex 32`. |
+| `READ_TOKEN` | **Yes in production** | `TOKEN` | Separate read-only secret used by modules to fetch `/loc.json`; it must differ from `TOKEN` in production. |
 | `PORT` | No | `8080` | Listen port; ports below 1024 require root. |
+| `HOST` | No | `0.0.0.0` | Listen address. |
+| `DATA_FILE` | No | `location-picker/loc.json` | Location data file; containers use `/data/loc.json`. |
+| `TRUST_PROXY` | No | `0` | Set to `1` only behind a trusted proxy such as Coolify. |
+| `SESSION_TTL` | No | `43200` | Admin browser session lifetime in seconds, clamped to 300–86400. |
 | `CERT` | No | empty | HTTPS fullchain certificate path; HTTPS is used only when both `CERT` and `KEY` are set. |
 | `KEY` | No | empty | HTTPS private key path; used only when both `CERT` and `KEY` are set. |
 
@@ -137,16 +142,16 @@ Startup examples:
 
 ```bash
 # http (simplest — get the flow working before switching to https)
-TOKEN=$(openssl rand -hex 24) PORT=8080 node server.js
+TOKEN=$(openssl rand -hex 32) READ_TOKEN=$(openssl rand -hex 32) PORT=8080 node server.js
 
 # https (reuse acme.sh certs; no restart needed on renewal — the process hot-reloads every 12 hours)
-TOKEN=$(openssl rand -hex 24) PORT=8443 \
+TOKEN=$(openssl rand -hex 32) READ_TOKEN=$(openssl rand -hex 32) PORT=8443 \
 CERT=/root/cert/example.com/fullchain.pem \
 KEY=/root/cert/example.com/privkey.pem \
 node server.js
 ```
 
-The data file `loc.json` is written next to `server.js` and records the current coordinates / altitude / accuracy. It is listed in `.gitignore`, so it won't be committed to the repo by accident.
+The `loc.json` data file is persisted with a temporary file, `fsync`, and atomic replacement to reduce corruption after an interrupted process or host. It is ignored by Git.
 
 > ⚠️ **Don't put `TOKEN` in your shell history.** Prefer systemd's `Environment=` or `.env` + `direnv` to avoid leaking it via `history` / `ps aux`.
 
@@ -154,15 +159,19 @@ The data file `loc.json` is written next to `server.js` and records the current 
 
 ```bash
 cd location-picker
-echo "TOKEN=$(openssl rand -hex 24)" > .env
+printf "TOKEN=%s\nREAD_TOKEN=%s\n" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
 docker compose up -d
 ```
 
-Based on `node:22-alpine`. Data volume mounts to current directory. `restart: unless-stopped`.
+The image uses `node:22-alpine`, runs as a non-root user with a read-only root filesystem, and stores coordinates in a named volume.
+
+### Coolify
+
+Coolify can deploy the root [`docker-compose.yml`](docker-compose.yml) directly. See [`COOLIFY.md`](COOLIFY.md) for domain, internal port, secrets, persistence, and backup instructions.
 
 ## Security note
 
-The Cloudflare Worker versions and `server.js` all require a token on every endpoint (including the map page). Token comparison is constant-time, and `server.js` refuses to start without a `TOKEN`. Because MITM decryption sees all traffic to the intercepted Apple endpoints, only enable the module while you actively need it, and keep your CA private key on-device only.
+The Cloudflare Worker versions require their existing token flow. The Node server exchanges the one-time admin URL for an HttpOnly browser session, keeps module reads on a separate read-only token, and leaves only `/healthz` unauthenticated. Token comparison is constant-time. Because MITM decryption sees all traffic to the intercepted Apple endpoints, only enable the module while you actively need it, and keep your CA private key on-device only.
 
 ## License
 
