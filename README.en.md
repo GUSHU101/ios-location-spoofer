@@ -13,9 +13,9 @@ Rewrite coordinates returned by Apple's location service through the HTTPS-decry
 |---|---|
 | Set up Shadowrocket in Chinese | [中文完整教程](使用教程.md) |
 | Set up Shadowrocket in English | [English tutorial](使用教程.en.md) |
-| Deploy the secure picker with Coolify | [Coolify guide](COOLIFY.md) |
-| Deploy a Worker with Wrangler | [Worker CLI guide](location-picker/worker/README.md) |
-| Deploy a Worker in the Cloudflare dashboard | [Worker dashboard guide](location-picker/cloudflare-webui/README.md) |
+| Deploy the secure picker with Coolify | [Coolify guide (Chinese)](COOLIFY.md) |
+| Deploy a Worker with Wrangler | [Worker CLI guide (Chinese)](location-picker/worker/README.md) |
+| Deploy a Worker in the Cloudflare dashboard | [Worker dashboard guide (Chinese)](location-picker/cloudflare-webui/README.md) |
 
 ## Quick start
 
@@ -30,19 +30,13 @@ The certificate trust step is essential. See the [English tutorial](使用教程
 
 | Client | Configuration | Import path | Status |
 |---|---|---|---|
-| Shadowrocket | [`ios-location-spoofer.sgmodule`](ios-location-spoofer.sgmodule) | Config → Modules → `+` → From URL | Verified |
-| Surge | [`ios-location-spoofer-surge.sgmodule`](ios-location-spoofer-surge.sgmodule) | Home → Modules → Install New Module | Verified |
-| Loon | [`ios-location-spoofer.lnplugin`](ios-location-spoofer.lnplugin) | Settings → Plugins → Add Plugin | Verified |
-| Quantumult X | [`ios-location-spoofer.snippet`](ios-location-spoofer.snippet) | Settings → Rewrite → Add | More testing needed |
-| Stash | [`ios-location-spoofer.stoverride`](ios-location-spoofer.stoverride) | Override → Install Override | Verified |
+| Shadowrocket | [Source](ios-location-spoofer.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule) | Config → Modules → `+` → From URL | Verified |
+| Surge | [Source](ios-location-spoofer-surge.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-surge.sgmodule) | Home → Modules → Install New Module | Verified |
+| Loon | [Source](ios-location-spoofer.lnplugin) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.lnplugin) | Settings → Plugins → Add Plugin | Verified |
+| Quantumult X | [Source](ios-location-spoofer.snippet) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.snippet) | Settings → Rewrite → Add | More testing needed |
+| Stash | [Source](ios-location-spoofer.stoverride) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.stoverride) | Override → Install Override | Verified |
 
-Shadowrocket remote import URL:
-
-```text
-https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule
-```
-
-If your result differs from the table, open an [issue](https://github.com/GUSHU101/ios-location-spoofer/issues) with the client version, iOS version, request host, and raw error message. Never include secrets or complete access URLs.
+When troubleshooting, record the client version, iOS version, request host, and raw error message. Never disclose secrets, cookies, certificates, or complete private URLs.
 
 ## Parameters
 
@@ -76,9 +70,9 @@ If you change locations frequently, deploy `location-picker`, select a point on 
 
 | Deployment | Best for | Authentication | Guide |
 |---|---|---|---|
-| Coolify / Docker Compose | A server and separate admin/client permissions | Admin secret + read-only secret + browser session | [Coolify guide](COOLIFY.md) |
-| Cloudflare Worker (CLI) | No server; comfortable with a CLI | One URL token | [Wrangler guide](location-picker/worker/README.md) |
-| Cloudflare Worker (dashboard) | No server; single-file copy and paste | One URL token | [Dashboard guide](location-picker/cloudflare-webui/README.md) |
+| Coolify / Docker Compose | A server and separate admin/client permissions | Admin secret + read-only secret + browser session | [Coolify guide (Chinese)](COOLIFY.md) |
+| Cloudflare Worker (CLI) | No server; comfortable with a CLI | One URL token | [Wrangler guide (Chinese)](location-picker/worker/README.md) |
+| Cloudflare Worker (dashboard) | No server; single-file copy and paste | One URL token | [Dashboard guide (Chinese)](location-picker/cloudflare-webui/README.md) |
 | Direct Node.js | Local development or an existing process manager | Admin secret + read-only secret + browser session | Header of [`location-picker/server.js`](location-picker/server.js) |
 
 The Coolify deployment is recommended for a long-running public service: its admin secret never enters the browser URL, and modules receive only a read-only secret. The Worker keeps its token in the URL for client compatibility, so restrict log access and rotate the token periodically.

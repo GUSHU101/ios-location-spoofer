@@ -128,3 +128,34 @@ test("published client files use the current GitHub repository", () => {
     assert.match(content, /github(?:usercontent)?\.com\/GUSHU101\/ios-location-spoofer/);
   }
 });
+
+test("both repository home pages expose every guide and client import", () => {
+  const guides = [
+    "使用教程.md",
+    "使用教程.en.md",
+    "COOLIFY.md",
+    "location-picker/worker/README.md",
+    "location-picker/cloudflare-webui/README.md",
+  ];
+  const clients = [
+    "ios-location-spoofer.sgmodule",
+    "ios-location-spoofer-surge.sgmodule",
+    "ios-location-spoofer.lnplugin",
+    "ios-location-spoofer.snippet",
+    "ios-location-spoofer.stoverride",
+  ];
+
+  for (const home of ["README.md", "README.en.md"]) {
+    const content = fs.readFileSync(path.join(repositoryRoot, home), "utf8");
+    for (const guide of guides) {
+      assert.ok(content.includes(`](${guide})`), `${home} does not link to ${guide}`);
+    }
+    for (const client of clients) {
+      assert.ok(content.includes(`](${client})`), `${home} does not link to ${client}`);
+      assert.ok(
+        content.includes(`](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/${client})`),
+        `${home} has no raw import link for ${client}`,
+      );
+    }
+  }
+});
