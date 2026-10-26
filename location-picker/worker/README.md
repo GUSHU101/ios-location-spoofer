@@ -108,4 +108,5 @@ Loon 用户也可在插件配置页的**远程配置 URL**中填写完整 `/loc.
 - **`tokenConfigured:false`**：没有设置 Secret `TOKEN`；重新执行 `wrangler secret put TOKEN`。
 - **主页返回 `403`**：URL 缺少 Token，或 Token 与当前 Secret 不一致。
 - **地图已保存但客户端还是旧坐标**：直接请求 `/loc.json` 核对，等待 KV / 客户端缓存刷新，再重连代理。
+- **OSM 显示 `403 Access blocked`**：拉取最新源码并重新部署；旧版本没有发送 OSM 要求的来源信息。
 - **部署前需要检查**：运行 `npm test`；它会校验接口、页面行为和生成文件一致性。

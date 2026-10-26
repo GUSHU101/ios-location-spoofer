@@ -94,6 +94,7 @@ https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/location-sp
 | `/health` 显示 `kv:false` | 重新绑定 KV，变量名必须为 `LOC_KV` |
 | `/health` 显示 `tokenConfigured:false` | 添加 Secret `TOKEN` 后重新部署 |
 | 根路径返回 `403` | URL 缺少 Token，或 Secret 已轮换 |
+| OSM 地图显示 `403 Access blocked` | 使用仓库最新的 `worker.js` 覆盖旧代码并重新部署 |
 | 搜索后坐标没变化 | 搜索后还需点地图放置图钉并点击保存 |
 | `/loc.json` 已更新但手机未变化 | 等待最多约 60 秒，重连代理并刷新 iOS 定位服务 |
 

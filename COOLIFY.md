@@ -127,6 +127,10 @@ https://picker.example.com/loc.json?token=<SERVICE_HEX_64_LOCATIONPICKERREAD>
 - Token 必须是当前的 `SERVICE_HEX_64_LOCATIONPICKERREAD`，复制时不要带尖括号、引号或空格。
 - 密钥轮换后，旧客户端 URL 会立即失效。
 
+### OSM 地图瓦片显示 `403 Access blocked`
+
+拉取仓库最新提交并重新部署。旧镜像使用了过严的 Referer 策略，会被 OpenStreetMap 瓦片服务拒绝；最新版本仅向第三方发送站点来源，不会发送路径或密钥。
+
 ### 重新部署后坐标丢失
 
 确认服务挂载的是命名卷 `location-picker-data:/data`，并且部署过程中没有删除或重建该卷。可从最近的 Coolify 卷备份恢复。

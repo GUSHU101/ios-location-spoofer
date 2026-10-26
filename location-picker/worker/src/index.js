@@ -24,8 +24,8 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
-  // 选点页 URL 带 ?token=，务必阻止它经 Referer 泄漏给 unpkg / 高德 / OSM / open-meteo / nominatim
-  "Referrer-Policy": "no-referrer",
+  // 跨站请求只发送来源，不发送带 ?token= 的完整路径；同时满足 OSM/Nominatim 的 Referer 要求。
+  "Referrer-Policy": "strict-origin-when-cross-origin",
   "X-Content-Type-Options": "nosniff",
 };
 

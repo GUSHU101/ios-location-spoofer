@@ -82,6 +82,7 @@ The Coolify deployment is recommended for a long-running public service: its adm
 - **`MITM failed`**: confirm that the CA is installed and fully trusted, the request host is in the module list, and retry after disabling QUIC / HTTP3.
 - **Location does not change**: confirm that both the module and HTTPS decryption are enabled; turn Location Services off for at least 10 seconds and fully restart Maps.
 - **The picker saved a point but the client did not update**: request `/loc.json` directly and check the values; Cloudflare KV and Loon caching can take about 60 seconds.
+- **The OSM map shows `403 Access blocked`**: update to the latest commit and redeploy; older builds suppressed the origin information required by OSM.
 - **Restore the real location**: disable the module or the proxy, then toggle Location Services off and on.
 
 See the [tutorial troubleshooting checklist](使用教程.en.md#troubleshooting) for a complete sequence.

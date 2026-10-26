@@ -126,7 +126,7 @@ test("health, scoped authentication, clean browser sessions and persistence work
   assert.equal(page.status, 200);
   assert.match(page.headers.get("content-security-policy"), /frame-ancestors 'none'/);
   assert.match(page.headers.get("content-security-policy"), /form-action 'self'/);
-  assert.equal(page.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(page.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
   assert.doesNotMatch(html, new RegExp(adminToken));
   assert.doesNotMatch(html, /__CSP_NONCE__/);
   assert.match(html, /integrity="sha256-/);
@@ -134,6 +134,9 @@ test("health, scoped authentication, clean browser sessions and persistence work
   assert.match(html, /<label class="sr-only" for="q">搜索地点<\/label>/);
   assert.match(html, /id="toast" role="status" aria-live="polite"/);
   assert.match(html, /action="\/session\/logout"/);
+  assert.match(html, /https:\/\/tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/);
+  assert.doesNotMatch(html, /https:\/\/\{s\}\.tile\.openstreetmap\.org/);
+  assert.match(html, /OpenStreetMap<\/a> contributors/);
   assert.doesNotMatch(html, /user-scalable=no|maximum-scale=1/);
 
   const queryWrite = await fetch(baseUrl + "/set?token=" + adminToken, {

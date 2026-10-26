@@ -154,7 +154,7 @@ function send(res, code, type, body, extraHeaders) {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",
-    "Referrer-Policy": "no-referrer",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY"
   }, extraHeaders || {});
@@ -347,7 +347,7 @@ function renderLogin(error) {
 
 function pageCsp(nonce) {
   return "default-src 'none'; base-uri 'none'; connect-src 'self' https://api.open-meteo.com https://nominatim.openstreetmap.org; " +
-    "font-src 'self'; frame-ancestors 'none'; img-src 'self' data: blob: https://unpkg.com https://*.autonavi.com https://*.openstreetmap.org; " +
+    "font-src 'self'; frame-ancestors 'none'; img-src 'self' data: blob: https://unpkg.com https://*.autonavi.com https://tile.openstreetmap.org; " +
     "form-action 'self'; object-src 'none'; script-src 'nonce-" + nonce + "' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com";
 }
 
@@ -924,7 +924,7 @@ function load(){
       L.tileLayer("https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=8",{subdomains:"1234",maxZoom:18})
     ]);
     amapSat.datum="gcj";
-    var osm=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"});
+    var osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,referrerPolicy:"strict-origin-when-cross-origin",attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'});
     osm.datum="wgs";
 
     map=L.map("map");
