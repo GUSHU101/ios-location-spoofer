@@ -368,12 +368,26 @@
     return out;
   }
 
+  function isApprovedWlocUrl(url) {
+    return /^https:\/\/(?:gs-loc(?:-cn|-new)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$/.test(String(url || ""));
+  }
+
+  function isSuccessfulResponseStatus(response) {
+    var raw = response && (response.status || response.statusCode);
+    if (raw == null || raw === "") return true;
+    var match = String(raw).match(/(?:^|\s)([1-5][0-9]{2})(?=\s|$)/);
+    return !!match && Number(match[1]) === 200;
+  }
+
   // ========== QX Entry Point ==========
 
   function runQX() {
     var hasResponse = typeof $response !== "undefined";
 
     if (hasResponse) {
+      if (typeof $request !== "undefined" && $request && $request.url &&
+          !isApprovedWlocUrl($request.url)) { $done({}); return; }
+      if (!isSuccessfulResponseStatus($response)) { $done({}); return; }
       var config = loadConfig();
       try {
         if (!config.enabled) { $done({}); return; }
@@ -420,7 +434,9 @@
     spoofAppleResponse: spoofAppleResponse,
     extractAppleWLocPayload: extractAppleWLocPayload,
     parseArpc: parseArpc,
-    coordToInt: coordToInt
+    coordToInt: coordToInt,
+    isApprovedWlocUrl: isApprovedWlocUrl,
+    isSuccessfulResponseStatus: isSuccessfulResponseStatus
   };
 
   if (typeof module !== "undefined" && module.exports) {
