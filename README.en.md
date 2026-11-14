@@ -38,11 +38,11 @@ Read the [domain audit, TLS limits, and iOS 26 diagnostic plan](docs/mitm-host-a
 
 | Client | Configuration | Import path | Status |
 |---|---|---|---|
-| Shadowrocket | [Source](ios-location-spoofer.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule) | Config → Modules → `+` → From URL | Verified |
-| Surge | [Source](ios-location-spoofer-surge.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-surge.sgmodule) | Home → Modules → Install New Module | Verified |
-| Loon | [Source](ios-location-spoofer.lnplugin) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.lnplugin) | Settings → Plugins → Add Plugin | Verified |
-| Quantumult X | [Source](ios-location-spoofer.snippet) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.snippet) | Settings → Rewrite → Add | More testing needed |
-| Stash | [Source](ios-location-spoofer.stoverride) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.stoverride) | Override → Install Override | Verified |
+| Shadowrocket | [Source](ios-location-spoofer.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule) | Config → Modules → `+` → From URL | Config CI passed; iOS 26 unverified |
+| Surge | [Source](ios-location-spoofer-surge.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-surge.sgmodule) | Home → Modules → Install New Module | Config CI passed; iOS 26 unverified |
+| Loon | [Source](ios-location-spoofer.lnplugin) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.lnplugin) | Settings → Plugins → Add Plugin | Config CI passed; iOS 26 unverified |
+| Quantumult X | [Source](ios-location-spoofer.snippet) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.snippet) | Settings → Rewrite → Add | Static checks only; device test pending |
+| Stash | [Source](ios-location-spoofer.stoverride) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.stoverride) | Override → Install Override | Config CI passed; iOS 26 unverified |
 
 When troubleshooting, record the client version, iOS version, request host, and raw error message. Never disclose secrets, cookies, certificates, or complete private URLs.
 
