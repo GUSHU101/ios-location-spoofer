@@ -88,6 +88,8 @@ test("remote schema accepts only valid coordinates and supported fields", () => 
   assert.equal(core.validateRemoteConfig(remote).latitude, 39.9042);
   for (const invalid of [
     null, {}, { latitude: "invalid", longitude: 1 },
+    { latitude: null, longitude: 0 }, { latitude: "", longitude: 0 },
+    { latitude: true, longitude: 0 }, { latitude: 0, longitude: null },
     { latitude: 99, longitude: 1 },
     { latitude: 1, longitude: -181 },
     { latitude: 1, longitude: 2, enabled: "false" }
@@ -160,4 +162,42 @@ test("no matching Wi-Fi or cell payload reports failure and passes through", () 
 test("public Shadowrocket module does not embed a live picker credential", () => {
   const moduleText = fs.readFileSync(path.join(root, "ios-location-spoofer.sgmodule"), "utf8");
   assert.doesNotMatch(moduleText, /token(?:=|%3D)[0-9a-f]{32,}/i);
+});
+
+test("QX Base64 decoding handles padded binary values without trailing zeroes", () => {
+  const qx = require("../../location-spoofer-qx.js");
+  for (let count = 1; count <= 20; count++) {
+    const bytes = Uint8Array.from({ length: count }, (_, i) => (i * 37 + 13) & 255);
+    const encoded = qx.bytesToBase64(bytes);
+    assert.deepEqual(Array.from(qx.base64ToBytes(encoded)), Array.from(bytes));
+  }
+  assert.throws(() => qx.base64ToBytes("not-base64!!!"), /invalid base64/);
+});
+test("QX preserves synthetic response suffix and bare protobuf framing", () => {
+  const qx = require("../../location-spoofer-qx.js");
+  const prefixed = originalResponse();
+  const withSuffix = core.concatBytes([prefixed, Uint8Array.from([0xaa, 0xbb])]);
+  const patched = qx.spoofAppleResponse(withSuffix, remote);
+  assert.deepEqual(Array.from(patched.response.slice(-2)), [0xaa, 0xbb]);
+  const bare = core.extractAppleWLocPayload(prefixed).payload;
+  const bareResult = qx.spoofAppleResponse(bare, remote);
+  assert.equal(bareResult.kind, "bare");
+  assert.equal(bareResult.response[0], bare[0]);
+});
+test("rejects local accuracy NaN / impossible altitude instead of serializing invalid protobuf", () => {
+  for (const invalid of [
+    { latitude: "foo" }, { longitude: "200" }, { horizontalAccuracy: "NaN" },
+    { verticalAccuracy: -1 }, { altitude: 999999 }, { motionActivityType: "invalid" }
+  ]) {
+    assert.throws(() => core.normalizeConfig(invalid), /INVALID_CONFIG/);
+  }
+});
+test("HTTP response integrity headers are removed after binary rewrite", () => {
+  const sourceText = fs.readFileSync(path.join(root, "location-spoofer.js"), "utf8");
+  const { done } = invokeScript();
+  assert.ok(done.headers);
+  const headers = Object.fromEntries(Object.entries(done.headers).map(([k,v])=>[k.toLowerCase(),v]));
+  assert.equal(headers["content-type"], "application/octet-stream");
+  assert.equal(Number(headers["content-length"]), done.body.length);
+  assert.equal(sourceText.includes('stale.indexOf(lower)'), true);
 });
