@@ -29,6 +29,10 @@
 
 **重要边界：** 网页保存成功、脚本读到新配置、iOS 系统实际采用修改后的定位，属于三个不同阶段。Apple 的 Core Location 并不提供通过 HTTPS 代理修改系统全局定位的公开 API。iOS 26 故障请先看[分层排查指南](docs/ios26-troubleshooting.md)。**公开仓库中的模块不应写入带密钥的 configUrl**；请在手机本地私有配置中替换单一 configUrl，若此前使用过公开 Token，需到服务端轮换。
 
+## HTTPS 解密范围：默认兼容 vs 最小权限
+
+[域名清单、Apple TLS 证书边界及验证步骤](docs/mitm-host-audit.md)。标准兼容模块针对已列出的五个具体 WLOC 域名；如只有两个主要 Apple 定位 Host 的请求，可以改用 [Shadowrocket 最小解密模块](ios-location-spoofer-minimal.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-minimal.sgmodule)。**两份模块二选一，不要同时启用。** 所有请求脚本只匹配 HTTPS 的 `/clls/wloc`，而 MITM 解密权限本身以域名为边界，不是只对一个 URL 路径生效。不能通过增加通配域名绕过证书绑定。
+
 ## 支持的客户端
 
 | 客户端 | 配置文件 | 导入位置 | 状态 |
