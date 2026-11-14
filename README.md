@@ -33,6 +33,22 @@
 
 [域名清单、Apple TLS 证书边界及验证步骤](docs/mitm-host-audit.md)。标准兼容模块针对已列出的五个具体 WLOC 域名；如只有两个主要 Apple 定位 Host 的请求，可以改用 [Shadowrocket 最小解密模块](ios-location-spoofer-minimal.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-minimal.sgmodule)。**两份模块二选一，不要同时启用。** 所有请求脚本只匹配 HTTPS 的 `/clls/wloc`，而 MITM 解密权限本身以域名为边界，不是只对一个 URL 路径生效。不能通过增加通配域名绕过证书绑定。
 
+## 七域名实验模式（仅在授权设备测试）
+
+已新增 `gs-loc-new.apple.com` 和 `gsp10-ssl.apple.com` 的**七域名可选实验配置**，同时保留双域名最小模式和原五域名兼容模式。前者仅在 `/clls/wloc` 上试验，后者主要涉及敏感位置观测上传，**不会被定位改写脚本处理**；但 HTTPS MITM 仍以 Host 为边界，请勿在日常设备上长期打开。
+
+[七域名原理、五种客户端配置、隐私风险与 iOS 26 验收指南](docs/seven-host-experimental.md)
+
+| 实验客户端 | 模块 |
+|---|---|
+| Shadowrocket | [七域名实验版](ios-location-spoofer-experimental.sgmodule) |
+| Surge | [七域名实验版](ios-location-spoofer-experimental-surge.sgmodule) |
+| Loon | [七域名实验版](ios-location-spoofer-experimental.lnplugin) |
+| Stash | [七域名实验版](ios-location-spoofer-experimental.stoverride) |
+| Quantumult X | [七域名实验版](ios-location-spoofer-experimental.snippet) |
+
+**同一客户端一次只能启用其中一种域名模式。** 增加域名无法保证绕过 iOS 26 的 TLS 证书绑定、也无法保证 Core Location 最终采用改写结果。
+
 ## 支持的客户端
 
 | 客户端 | 配置文件 | 导入位置 | 状态 |
