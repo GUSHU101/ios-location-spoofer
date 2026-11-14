@@ -1,0 +1,14 @@
+#!name=iOS Location Spoofer - Experimental Seven Hosts (Quantumult X)
+#!desc=实验模式：列出7个精确的HTTPS解密Host，仅对6个候选WLOC Host的/clls/wloc做脚本改写，绝不改写gsp10位置上报接口。
+# EXPERIMENTAL: gsp10-ssl.apple.com can carry sensitive device location uploads.
+# Upload paths /hcy/pbcwloc, /pds/pd, /hvr/trc are NOT processed by scripts.
+# MITM still decrypts by hostname. Only use on devices you own and with consent.
+# gs-loc-new.apple.com is not a documented Apple WLOC API. No GPS guarantee.
+# Never enable this alongside another profile.
+#!homepage=https://github.com/GUSHU101/ios-location-spoofer
+
+[rewrite_local]
+^https:\/\/(?:gs-loc(?:-cn|-new)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$ url script-response-body https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/location-spoofer-qx.js
+
+[mitm]
+hostname = gs-loc.apple.com, gs-loc-cn.apple.com, gsp-ssl.ls.apple.com, bluedot.is.autonavi.com, bluedot.is.autonavi.com.gds.alibabadns.com, gs-loc-new.apple.com, gsp10-ssl.apple.com
