@@ -112,7 +112,9 @@ test("network-first response uses newly saved coordinates on this very request",
   const extracted = core.extractAppleWLocPayload(result.done.body);
   const wifi = core.firstFieldByNumber(core.parseFields(extracted.payload), 2);
   const location = core.firstFieldByNumber(core.parseFields(wifi.valueBytes), 2);
-  assert.match(core.locationSummary(location.valueBytes), /^39\.9042,116\.4074/);
+  const coords = core.locationSummary(location.valueBytes).split(",").map(Number);
+  assert.ok(Math.abs(coords[0] - remote.latitude) < 0.000001);
+  assert.ok(Math.abs(coords[1] - remote.longitude) < 0.000001);
   assert.ok(result.logs.some(x => x.includes("REMOTE_CONFIG_FRESH")));
   assert.ok(result.store.state.has("location_spoofer_remote_cfg"));
   assert.equal(result.logs.some(x => x.includes("secret-not-for-logs")), false);
