@@ -75,6 +75,10 @@
 - [ ] TLS 解密是否成功通过真机日志验证
 - [ ] iOS 26 真机 Apple 地图与目标应用分别验证，记录观察结果；未通过时标记“不支持/未验证”
 
+## 候选第六、第七域名
+
+你还可以在经授权测试的设备上使用[七域名实验版](seven-host-experimental.md)，其中 `gs-loc-new.apple.com` 允许实验性 WLOC 路径匹配，而 `gsp10-ssl.apple.com` 仅加入 MITM Host 实验清单、排除所有已知定位/传感器上传脚本改写。更换为七域名模式**不会**解决 TLS pinning 或硬件 GPS 来源问题。
+
 ## HTTPS 域名兼容与脚本范围
 
 优先使用两个主要 Host 的 [最小 Shadowrocket MITM 模块](../ios-location-spoofer-minimal.sgmodule) 对照测试；确认实际定位请求命中另外三个备用 Host 时再使用五域名兼容模块。详细的 [MITM 域名审查与 Apple 证书限制](mitm-host-audit.md) 包含完整域名表及四阶段验收原则。保持两个模块互斥启用。
