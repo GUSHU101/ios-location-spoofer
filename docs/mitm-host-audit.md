@@ -64,6 +64,10 @@ Apple 的公开 Core Location / Network Extension 文档**没有**将 /clls/wloc
 每一级均需要单独证据，绝不因为前一级成功就自动声称后一级也成功。
 
 
+## 七域名研究扩展
+
+已增加独立的 [七域名实验配置与风险审查](seven-host-experimental.md)。`gs-loc-new.apple.com` 仅作为候选 `/clls/wloc` 处理目标，`gsp10-ssl.apple.com` 只加入可选 HTTPS MITM Host 清单，脚本不改写其已知上传接口。默认双域名/五域名模块不受影响。七域名模式涉及敏感位置上报的潜在明文访问风险，仅用于授权短期测试。
+
 ## 7. 在 Draft PR 上进行真机预览（尚未合并 main）
 
 **注意**：为了保证最终合并后的订阅地址稳定，当前提交到仓库的正式模块里的 `script-path` 仍指向 `main/location-spoofer.js`。如果从本 PR 分支直接导入模块而不改这个路径，你实际运行的仍可能是旧的 main 核心脚本。不能把这个测试当成新代码的真机验收。
