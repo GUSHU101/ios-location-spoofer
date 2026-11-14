@@ -74,3 +74,7 @@
 - [ ] 自动化单元测试通过
 - [ ] TLS 解密是否成功通过真机日志验证
 - [ ] iOS 26 真机 Apple 地图与目标应用分别验证，记录观察结果；未通过时标记“不支持/未验证”
+
+## HTTPS 域名兼容与脚本范围
+
+优先使用两个主要 Host 的 [最小 Shadowrocket MITM 模块](../ios-location-spoofer-minimal.sgmodule) 对照测试；确认实际定位请求命中另外三个备用 Host 时再使用五域名兼容模块。详细的 [MITM 域名审查与 Apple 证书限制](mitm-host-audit.md) 包含完整域名表及四阶段验收原则。保持两个模块互斥启用。
