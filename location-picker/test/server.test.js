@@ -256,3 +256,20 @@ test("health, scoped authentication, clean browser sessions and persistence work
   assert.equal(logout.headers.get("location"), "/");
   assert.match(logout.headers.get("set-cookie"), /Max-Age=0/);
 });
+
+
+test("corrupted saved location returns 503 instead of silently resetting to defaults", async () => {
+  const before = fs.readFileSync(dataFile, "utf8");
+  try {
+    fs.writeFileSync(dataFile, "{\"latitude\":null,\"longitude\":null,\"enabled\":true}");
+    const remote = await fetch(baseUrl + "/loc.json?token=" + readToken);
+    assert.equal(remote.status, 503);
+    assert.deepEqual(await remote.json(), { error: "saved location unavailable" });
+    const health = await fetch(baseUrl + "/healthz");
+    assert.equal(health.status, 503);
+    assert.deepEqual(await health.json(), { status: "unavailable" });
+  } finally {
+    fs.writeFileSync(dataFile, before);
+  }
+  assert.equal((await fetch(baseUrl + "/healthz")).status, 200);
+});
