@@ -2,30 +2,30 @@
 
 [返回项目首页](../README.md) · [iOS 26 分层排障](ios26-troubleshooting.md) · [Shadowrocket 教程](../使用教程.md)
 
-> 此项目用于在授权设备上研究网络定位响应。它并非 Apple 官方的系统级定位模拟接口。解密范围应当最小化，禁止为了“提高成功率”使用 \`*.apple.com\`、跳过服务器证书验证或替换系统信任规则。
+> 此项目用于在授权设备上研究网络定位响应。它并非 Apple 官方的系统级定位模拟接口。解密范围应当最小化，禁止为了“提高成功率”使用 `*.apple.com`、跳过服务器证书验证或替换系统信任规则。
 
 ## 1. Host 分级
 
 | 等级 | 目标 SNI/URL Host | 依据与用途 | 默认支持 |
 |---|---|---|---|
-| 核心 | \`gs-loc.apple.com\` | 社区 WLOC 项目主要目标 | 是 |
-| 核心 | \`gs-loc-cn.apple.com\` | 社区 WLOC 项目中国区域目标 | 是 |
-| 兼容 | \`gsp-ssl.ls.apple.com\` | 社区模块包含的备用目标 | 五域名兼容模式 |
-| 兼容 | \`bluedot.is.autonavi.com\` | 社区模块包含的高德相关目标 | 五域名兼容模式 |
-| 兼容 | \`bluedot.is.autonavi.com.gds.alibabadns.com\` | 社区模块包含的高德别名目标 | 五域名兼容模式 |
-| 待核验 | \`gs-loc-new.apple.com\` | 个别第三方项目列出，缺少当前设备的实际 /clls/wloc 请求证据 | **否** |
+| 核心 | `gs-loc.apple.com` | 社区 WLOC 项目主要目标 | 是 |
+| 核心 | `gs-loc-cn.apple.com` | 社区 WLOC 项目中国区域目标 | 是 |
+| 兼容 | `gsp-ssl.ls.apple.com` | 社区模块包含的备用目标 | 五域名兼容模式 |
+| 兼容 | `bluedot.is.autonavi.com` | 社区模块包含的高德相关目标 | 五域名兼容模式 |
+| 兼容 | `bluedot.is.autonavi.com.gds.alibabadns.com` | 社区模块包含的高德别名目标 | 五域名兼容模式 |
+| 待核验 | `gs-loc-new.apple.com` | 个别第三方项目列出，缺少当前设备的实际 /clls/wloc 请求证据 | **否** |
 
 Apple 的公开 Core Location / Network Extension 文档**没有**将 /clls/wloc 或上述内部域名定义为可供第三方依赖的稳定接口，以上属于社区兼容性信息，并不是 Apple 支持承诺。
 
 ## 2. Shadowrocket 的两种配置（只选择一种）
 
 - **兼容模式（原有五域名）**：[ios-location-spoofer.sgmodule](../ios-location-spoofer.sgmodule)：适合已经确认命中备用域名的设备。
-- **最小解密模式（推荐先验证）**：[ios-location-spoofer-minimal.sgmodule](../ios-location-spoofer-minimal.sgmodule)：仅对 \`gs-loc.apple.com\` 和 \`gs-loc-cn.apple.com\` 解密，缩小信任证书允许读取的流量范围。
+- **最小解密模式（推荐先验证）**：[ios-location-spoofer-minimal.sgmodule](../ios-location-spoofer-minimal.sgmodule)：仅对 `gs-loc.apple.com` 和 `gs-loc-cn.apple.com` 解密，缩小信任证书允许读取的流量范围。
 
 不要同时启用两份模块，否则请求可能重复触发脚本。两个模块内均包含：
-1. HTTPS-only 的 Request 预处理，设置 \`Accept-Encoding: identity\`；
-2. HTTPS-only 的 Response 脚本，且 URL 必须完整匹配 \`/clls/wloc\` 或带查询参数；
-3. 与脚本域名相同的精确 MITM hostname allowlist，使用 \`%APPEND%\` 避免覆盖其他模块。
+1. HTTPS-only 的 Request 预处理，设置 `Accept-Encoding: identity`；
+2. HTTPS-only 的 Response 脚本，且 URL 必须完整匹配 `/clls/wloc` 或带查询参数；
+3. 与脚本域名相同的精确 MITM hostname allowlist，使用 `%APPEND%` 避免覆盖其他模块。
 
 仅允许上述路径被**脚本改写**；MITM 本身是以 Host 为边界的 HTTPS 解密，不能承诺“仅解密某个 URL 路径”。这也是最小域名模式重要的原因。
 
@@ -35,8 +35,8 @@ Apple 的公开 Core Location / Network Extension 文档**没有**将 /clls/wloc
 2. 在有权限的设备上查看定位服务连接的 Host / URL 路径。只记录脱敏 Host、路径、HTTP/TLS 错误和时间，不公开请求正文、证书、Token。
 3. 如果 Host 不在上述两个核心域名、但存在于另外三个兼容域名，先切换到五域名模式，再做受控对照；如没有相应请求，就不增加解密范围。
 4. 如果连接被 TLS 证书绑定或系统信任策略拒绝，不能靠扩大 MITM 域名或修补二进制响应修复。
-5. 如果请求存在、解密成功但脚本不触发，检查路径是否 **严格等于** \`/clls/wloc\`，不允许凭猜测改为所有 \`/clls/*\`。
-6. 如果脚本得到 \`REMOTE_CONFIG_FRESH\`，再确认是否输出非零 Wi-Fi/Cell 改写字段。之后才观察 Apple 地图；日志“已改写”不等于 Core Location 已采用结果。
+5. 如果请求存在、解密成功但脚本不触发，检查路径是否 **严格等于** `/clls/wloc`，不允许凭猜测改为所有 `/clls/*`。
+6. 如果脚本得到 `REMOTE_CONFIG_FRESH`，再确认是否输出非零 Wi-Fi/Cell 改写字段。之后才观察 Apple 地图；日志“已改写”不等于 Core Location 已采用结果。
 
 ## 4. 兼容性与 Apple 官方文档
 
@@ -49,10 +49,10 @@ Apple 的公开 Core Location / Network Extension 文档**没有**将 /clls/wloc
 ## 5. 具体源码护栏
 
 - CI 检查五种客户端配置、两个 Shadowrocket 变体的 MITM 域名集合与脚本 URL 匹配；未确认的新域名必须以明确的审计结论进入仓库。
-- 禁止匹配 \`http://\`、子域名、伪造后缀（\`gs-loc.apple.com.evil.test\`）、无关路径及 \`wloc-settings\`。
-- 禁止在公开配置中写入私有的 \`configUrl\`、只读 Token 或 CA 私钥。
+- 禁止匹配 `http://`、子域名、伪造后缀（`gs-loc.apple.com.evil.test`）、无关路径及 `wloc-settings`。
+- 禁止在公开配置中写入私有的 `configUrl`、只读 Token 或 CA 私钥。
 - 若不再需要测试，应关闭对应的 MITM 模块；仅关闭 JavaScript 不代表停止 HTTPS 解密。
-- 若有证据显示 iOS 26 的 \`locationd\` 拒绝代理证书，请保留脱敏 TLS 错误用于诊断，而不是尝试关闭证书验证。
+- 若有证据显示 iOS 26 的 `locationd` 拒绝代理证书，请保留脱敏 TLS 错误用于诊断，而不是尝试关闭证书验证。
 
 ## 6. 验收结论的四个独立等级
 
