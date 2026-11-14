@@ -46,14 +46,15 @@ function originalResponse() {
 }
 function invokeScript({ responseBytes = originalResponse(), status = 200, body = JSON.stringify(remote),
                         error = null, store = freshStore(), encoding = "", utils = undefined,
-                        argument = null } = {}) {
+                        argument = null, requestUrl = "https://gs-loc.apple.com/clls/wloc",
+                        responseStatus = 200 } = {}) {
   const calls = [];
   const logs = [];
   const ctx = {
     $argument: argument ?? "mode=response&debug=true&configUrl=" + encodeURIComponent(configUrl),
-    $request: { url: "https://gs-loc.apple.com/clls/wloc" },
+    $request: { url: requestUrl },
     $response: {
-      status: 200,
+      status: responseStatus,
       headers: encoding ? { "Content-Encoding": encoding } : {},
       bodyBytes: responseBytes
     },
@@ -201,4 +202,25 @@ test("HTTP response integrity headers are removed after binary rewrite", () => {
   assert.equal(headers["content-type"], "application/octet-stream");
   assert.equal(Number(headers["content-length"]), done.body.length);
   assert.equal(sourceText.includes('stale.indexOf(lower)'), true);
+});
+
+
+test("experimental gs-loc-new /clls/wloc may be patched only when a valid WLOC frame exists", () => {
+  const result = invokeScript({requestUrl:"https://gs-loc-new.apple.com/clls/wloc"});
+  assert.ok(result.done.body,"expected synthetic valid WLOC frame to be patched");
+  assert.ok(result.logs.some(x=>x.includes("REMOTE_CONFIG_FRESH")));
+});
+test("gsp10 telemetry requests are strictly passed through without attempting remote sync", () => {
+  for(const path of ["/hcy/pbcwloc","/pds/pd","/hvr/trc","/clls/wloc"]){
+    const result=invokeScript({requestUrl:"https://gsp10-ssl.apple.com"+path});
+    assert.equal(Object.hasOwn(result.done,"body"),false,path);
+    assert.equal(result.logs.some(x=>x.includes("REMOTE_CONFIG_FRESH")),false,path);
+  }
+});
+test("non-200 upstream WLOC response is not modified and is not treated as valid location", () => {
+  for(const responseStatus of [302,401,403,429,500]) {
+    const result = invokeScript({responseStatus});
+    assert.equal(Object.hasOwn(result.done,"body"),false,responseStatus);
+    assert.equal(result.logs.some(x=>x.includes("REMOTE_CONFIG_FRESH")),false,responseStatus);
+  }
 });
