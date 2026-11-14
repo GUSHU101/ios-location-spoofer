@@ -62,3 +62,23 @@ Apple 的公开 Core Location / Network Extension 文档**没有**将 /clls/wloc
 - **SYSTEM_LOCATION_ADOPTED**：真机上的 Core Location/地图实际表现与目标一致。
 
 每一级均需要单独证据，绝不因为前一级成功就自动声称后一级也成功。
+
+
+## 7. 在 Draft PR 上进行真机预览（尚未合并 main）
+
+**注意**：为了保证最终合并后的订阅地址稳定，当前提交到仓库的正式模块里的 `script-path` 仍指向 `main/location-spoofer.js`。如果从本 PR 分支直接导入模块而不改这个路径，你实际运行的仍可能是旧的 main 核心脚本。不能把这个测试当成新代码的真机验收。
+
+授权测试设备可使用下列做法：
+
+1. 从 [PR 分支选择模块](https://github.com/GUSHU101/ios-location-spoofer/tree/fix/ios26-remote-sync-and-diagnostics)，将 **最小模式或兼容模式其中一份**导入 Shadowrocket，并复制成手机上的本地私有模块（避免自动更新覆盖测试更改）。
+2. 将模块中的**两个** `script-path`（Request 预处理和 Response 改写）都临时替换为经核验的 PR 分支脚本地址：
+
+   ```text
+   https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/refs/heads/fix/ios26-remote-sync-and-diagnostics/location-spoofer.js
+   ```
+
+3. 在本地 `argument` 中替换唯一的 `configUrl`，使用选点器生成的 URL 编码只读地址。不要将含 Token 的模块提交到 Git。
+4. 先用 Safari 确认 `/loc.json` 返回新坐标，再检查 Shadowrocket 日志中是否有 `REMOTE_CONFIG_FRESH`、非零 Wi-Fi/Cell 改写统计、TLS 失败等状态。
+5. 将结果记录为 **同步验证成功/失败** 和 **系统定位验证成功/失败** 两个独立结果，不要将它们混为一谈。
+
+分支测试后关闭实验模块；未来完成真机验收并正式合并 PR 后，再使用 `main` 的长期订阅链接。不应将此临时分支脚本永久用于生产环境。
