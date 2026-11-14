@@ -12,6 +12,7 @@
 | 你的目标 | 文档 |
 |---|---|
 | 第一次使用 Shadowrocket | [中文完整教程](使用教程.md) |
+| iOS 26 网页已保存但手机位置不更新 | [iOS 26 分层排障与验收](docs/ios26-troubleshooting.md) |
 | Read the guide in English | [English tutorial](使用教程.en.md) |
 | 用 Coolify 部署安全的网页选点器 | [Coolify 部署指南](COOLIFY.md) |
 | 用命令行部署 Cloudflare Worker | [Worker / Wrangler 指南](location-picker/worker/README.md) |
@@ -26,15 +27,37 @@
 
 新手请不要跳过证书信任步骤，完整操作和故障排查见[中文教程](使用教程.md)。
 
+**重要边界：** 网页保存成功、脚本读到新配置、iOS 系统实际采用修改后的定位，属于三个不同阶段。Apple 的 Core Location 并不提供通过 HTTPS 代理修改系统全局定位的公开 API。iOS 26 故障请先看[分层排查指南](docs/ios26-troubleshooting.md)。**公开仓库中的模块不应写入带密钥的 configUrl**；请在手机本地私有配置中替换单一 configUrl，若此前使用过公开 Token，需到服务端轮换。
+
+## HTTPS 解密范围：默认兼容 vs 最小权限
+
+[域名清单、Apple TLS 证书边界及验证步骤](docs/mitm-host-audit.md)。标准兼容模块针对已列出的五个具体 WLOC 域名；如只有两个主要 Apple 定位 Host 的请求，可以改用 [Shadowrocket 最小解密模块](ios-location-spoofer-minimal.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-minimal.sgmodule)。**两份模块二选一，不要同时启用。** 所有请求脚本只匹配 HTTPS 的 `/clls/wloc`，而 MITM 解密权限本身以域名为边界，不是只对一个 URL 路径生效。不能通过增加通配域名绕过证书绑定。
+
+## 七域名实验模式（仅在授权设备测试）
+
+已新增 `gs-loc-new.apple.com` 和 `gsp10-ssl.apple.com` 的**七域名可选实验配置**，同时保留双域名最小模式和原五域名兼容模式。前者仅在 `/clls/wloc` 上试验，后者主要涉及敏感位置观测上传，**不会被定位改写脚本处理**；但 HTTPS MITM 仍以 Host 为边界，请勿在日常设备上长期打开。
+
+[七域名原理、五种客户端配置、隐私风险与 iOS 26 验收指南](docs/seven-host-experimental.md)
+
+| 实验客户端 | 模块 |
+|---|---|
+| Shadowrocket | [七域名实验版](ios-location-spoofer-experimental.sgmodule) |
+| Surge | [七域名实验版](ios-location-spoofer-experimental-surge.sgmodule) |
+| Loon | [七域名实验版](ios-location-spoofer-experimental.lnplugin) |
+| Stash | [七域名实验版](ios-location-spoofer-experimental.stoverride) |
+| Quantumult X | [七域名实验版](ios-location-spoofer-experimental.snippet) |
+
+**同一客户端一次只能启用其中一种域名模式。** 增加域名无法保证绕过 iOS 26 的 TLS 证书绑定、也无法保证 Core Location 最终采用改写结果。
+
 ## 支持的客户端
 
 | 客户端 | 配置文件 | 导入位置 | 状态 |
 |---|---|---|---|
-| Shadowrocket | [查看](ios-location-spoofer.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule) | 配置 → 模块 → `+` → 来自 URL | 已验证 |
-| Surge | [查看](ios-location-spoofer-surge.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-surge.sgmodule) | 首页 → 模块 → 安装新模块 | 已验证 |
-| Loon | [查看](ios-location-spoofer.lnplugin) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.lnplugin) | 设置 → 插件 → 添加插件 | 已验证 |
-| Quantumult X | [查看](ios-location-spoofer.snippet) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.snippet) | 设置 → 重写 → 添加 | 待更多实测 |
-| Stash | [查看](ios-location-spoofer.stoverride) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.stoverride) | 覆写 → 安装覆写 | 已验证 |
+| Shadowrocket | [查看](ios-location-spoofer.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule) | 配置 → 模块 → `+` → 来自 URL | 配置检查通过；iOS 26 待真机验收 |
+| Surge | [查看](ios-location-spoofer-surge.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-surge.sgmodule) | 首页 → 模块 → 安装新模块 | 配置检查通过；iOS 26 待真机验收 |
+| Loon | [查看](ios-location-spoofer.lnplugin) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.lnplugin) | 设置 → 插件 → 添加插件 | 配置检查通过；iOS 26 待真机验收 |
+| Quantumult X | [查看](ios-location-spoofer.snippet) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.snippet) | 设置 → 重写 → 添加 | 仅静态检查；真机待验证 |
+| Stash | [查看](ios-location-spoofer.stoverride) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.stoverride) | 覆写 → 安装覆写 | 配置检查通过；iOS 26 待真机验收 |
 
 排查异常时，至少记录客户端版本、iOS 版本、请求 Host 和原始错误日志；不要公开密钥、Cookie、证书或完整私有 URL。
 

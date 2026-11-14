@@ -119,11 +119,30 @@ function ensureDataDirectory() {
 }
 
 function readLoc() {
+  let raw;
   try {
-    return normalizeLoc(JSON.parse(fs.readFileSync(DATA_FILE, "utf8")));
-  } catch (e) {
-    return Object.assign({}, DEFAULT);
+    raw = fs.readFileSync(DATA_FILE, "utf8");
+  } catch (error) {
+    // Fresh deployments have no location file yet. Existing corrupt or
+    // unreadable files must not silently revert to the Apple Park default.
+    if (error.code === "ENOENT") return Object.assign({}, DEFAULT);
+    throw error;
   }
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch (error) {
+    throw new Error("saved location JSON is corrupted");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      ![value.latitude, value.longitude].every(x =>
+        (typeof x === "number" || (typeof x === "string" && x.trim() !== "")) && Number.isFinite(Number(x))) ||
+      Number(value.latitude) < -90 || Number(value.latitude) > 90 ||
+      Number(value.longitude) < -180 || Number(value.longitude) > 180 ||
+      (value.enabled !== undefined && typeof value.enabled !== "boolean")) {
+    throw new Error("saved location data is invalid");
+  }
+  return normalizeLoc(value);
 }
 
 function writeLoc(obj) {
@@ -372,6 +391,7 @@ function handler(req, res) {
     try {
       ensureDataDirectory();
       fs.accessSync(path.dirname(DATA_FILE), fs.constants.R_OK | fs.constants.W_OK);
+      readLoc(); // Include saved location integrity in readiness, not only volume permissions.
       return sendJson(res, 200, { status: "ok" });
     } catch (e) {
       return sendJson(res, 503, { status: "unavailable" });
@@ -380,7 +400,12 @@ function handler(req, res) {
 
   if (url.pathname === "/loc.json" && req.method === "GET") {
     if (!isReadRequest(req, url)) return rejectAuth(res);
-    return sendJson(res, 200, readLoc());
+    try {
+      return sendJson(res, 200, readLoc());
+    } catch (error) {
+      console.error("定位配置存储损坏或不可读：" + error.message);
+      return sendJson(res, 503, { error: "saved location unavailable" });
+    }
   }
 
   if (url.pathname === "/client-config" && req.method === "GET") {
@@ -760,7 +785,7 @@ function loadClientConfig(){
       $("client-argument").value=d.argumentSuffix;
       $("copy-config-url").disabled=false;
       $("copy-client-argument").disabled=false;
-      $("client-config-status").textContent="配置已就绪。修改网页位置后，手机端会在下次请求时读取新值。";
+      $("client-config-status").textContent="只读配置已生成。只有下次成功拦截定位请求时手机脚本才可能读取新位置；不保证系统采用。";
     })
     .catch(function(){
       $("client-config-url").value="";
@@ -927,16 +952,33 @@ function movePin(dispLat,dispLng){
 }
 
 // 保存定位点到设备（写入 loc.json，Shadowrocket 才会用）
+var saveInProgress=false;
 function commit(){
-  if(!$("alt").checkValidity()||!$("hacc").checkValidity()||!$("vacc").checkValidity()){
-    toast("请输入有效范围内的海拔和精度");
+  if(saveInProgress)return;
+  if(!Number.isFinite(WGS.lat)||WGS.lat < -90||WGS.lat > 90||
+     !Number.isFinite(WGS.lng)||WGS.lng < -180||WGS.lng > 180||
+     !$("alt").checkValidity()||!$("hacc").checkValidity()||!$("vacc").checkValidity()){
+    toast("请输入合法经纬度、海拔和精度");
     return;
   }
   var payload={lat:WGS.lat, lng:WGS.lng,
     altitude:numOrNull("alt"), horizontalAccuracy:numOrNull("hacc"), verticalAccuracy:numOrNull("vacc")};
+  saveInProgress=true;
+  $("savebtn").disabled=true;
   fetch("/set",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
-    .then(function(r){ if(r.ok){ saved=true; enabledState=true; updateEnabledUI(); toast("已保存 ✓ 记得关开定位生效"); } else { toast("保存失败 "+r.status); } })
-    .catch(function(){ toast("网络错误"); });
+    .then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.json();})
+    .then(function(d){
+      if(!d||d.enabled!==true||!Number.isFinite(Number(d.latitude))||
+         !Number.isFinite(Number(d.longitude))||
+         Math.abs(Number(d.latitude)-payload.lat)>0.000001||
+         Math.abs(Number(d.longitude)-payload.lng)>0.000001){
+        throw new Error("服务器返回的坐标与保存值不一致");
+      }
+      saved=true;enabledState=true;updateEnabledUI();
+      toast("服务器已保存 ✓ 手机需下次定位请求才可能更新");
+    })
+    .catch(function(error){toast("保存未确认："+(error&&error.message||"网络错误"));})
+    .finally(function(){saveInProgress=false;$("savebtn").disabled=false;});
 }
 
 function locateCurrent(){

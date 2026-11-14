@@ -17,6 +17,10 @@ Rewrite coordinates returned by Apple's location service through the HTTPS-decry
 | Deploy a Worker with Wrangler | [Worker CLI guide (Chinese)](location-picker/worker/README.md) |
 | Deploy a Worker in the Cloudflare dashboard | [Worker dashboard guide (Chinese)](location-picker/cloudflare-webui/README.md) |
 
+## iOS 26 troubleshooting and public API boundaries
+
+The picker saving a coordinate, the phone fetching it, and Core Location adopting it are distinct outcomes. This project rewrites selected Apple network-location responses, not a documented system-wide GPS replacement API. See the [layered iOS 26 diagnosis guide](docs/ios26-troubleshooting.md). Keep read-only tokens in private local client settings and rotate any token previously published in a public module.
+
 ## Quick start
 
 1. Choose a proxy client below and import its configuration.
@@ -26,15 +30,35 @@ Rewrite coordinates returned by Apple's location service through the HTTPS-decry
 
 The certificate trust step is essential. See the [English tutorial](使用教程.en.md) for the complete walkthrough and troubleshooting flow.
 
+## HTTPS MITM scope and least-privilege option
+
+Read the [domain audit, TLS limits, and iOS 26 diagnostic plan](docs/mitm-host-audit.md). The existing compatibility module explicitly targets five community-observed WLOC hosts. You can alternatively use the [minimal Shadowrocket MITM module](ios-location-spoofer-minimal.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-minimal.sgmodule), limited to the two primary Apple hosts. **Do not enable both modules at once.** Scripts only rewrite HTTPS `/clls/wloc` responses, but MITM decryption applies at the hostname level, not just a URL path. More hosts do not bypass TLS certificate pinning.
+
+## Optional seven-host research profiles
+
+An **opt-in seven-host experimental configuration** adds `gs-loc-new.apple.com` and `gsp10-ssl.apple.com`, while retaining the minimal two-host and standard five-host profiles. Only the former new host is considered a candidate `/clls/wloc` rewrite target. The latter is primarily associated with location/sensor **uploads** and must not be rewritten; opt-in HTTPS MITM nonetheless decrypts traffic at the hostname boundary.
+
+[Read the seven-host evidence, privacy boundaries, client profiles and real-device verification guide](docs/seven-host-experimental.md).
+
+| Experimental client | Module |
+|---|---|
+| Shadowrocket | [Seven-host profile](ios-location-spoofer-experimental.sgmodule) |
+| Surge | [Seven-host profile](ios-location-spoofer-experimental-surge.sgmodule) |
+| Loon | [Seven-host profile](ios-location-spoofer-experimental.lnplugin) |
+| Stash | [Seven-host profile](ios-location-spoofer-experimental.stoverride) |
+| Quantumult X | [Seven-host profile](ios-location-spoofer-experimental.snippet) |
+
+**Never enable multiple profile variants together.** Additional hosts cannot bypass TLS pinning or guarantee adoption of modified network-location responses by Core Location.
+
 ## Supported clients
 
 | Client | Configuration | Import path | Status |
 |---|---|---|---|
-| Shadowrocket | [Source](ios-location-spoofer.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule) | Config → Modules → `+` → From URL | Verified |
-| Surge | [Source](ios-location-spoofer-surge.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-surge.sgmodule) | Home → Modules → Install New Module | Verified |
-| Loon | [Source](ios-location-spoofer.lnplugin) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.lnplugin) | Settings → Plugins → Add Plugin | Verified |
-| Quantumult X | [Source](ios-location-spoofer.snippet) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.snippet) | Settings → Rewrite → Add | More testing needed |
-| Stash | [Source](ios-location-spoofer.stoverride) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.stoverride) | Override → Install Override | Verified |
+| Shadowrocket | [Source](ios-location-spoofer.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule) | Config → Modules → `+` → From URL | Config CI passed; iOS 26 unverified |
+| Surge | [Source](ios-location-spoofer-surge.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-surge.sgmodule) | Home → Modules → Install New Module | Config CI passed; iOS 26 unverified |
+| Loon | [Source](ios-location-spoofer.lnplugin) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.lnplugin) | Settings → Plugins → Add Plugin | Config CI passed; iOS 26 unverified |
+| Quantumult X | [Source](ios-location-spoofer.snippet) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.snippet) | Settings → Rewrite → Add | Static checks only; device test pending |
+| Stash | [Source](ios-location-spoofer.stoverride) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.stoverride) | Override → Install Override | Config CI passed; iOS 26 unverified |
 
 When troubleshooting, record the client version, iOS version, request host, and raw error message. Never disclose secrets, cookies, certificates, or complete private URLs.
 

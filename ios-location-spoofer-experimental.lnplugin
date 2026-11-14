@@ -1,0 +1,33 @@
+#!name=iOS Location Spoofer - Experimental Seven Hosts (Loon)
+#!desc=实验模式：列出7个精确的HTTPS解密Host，仅对6个候选WLOC Host的/clls/wloc做脚本改写，绝不改写gsp10位置上报接口。
+# EXPERIMENTAL: gsp10-ssl.apple.com can carry sensitive device location uploads.
+# Upload paths /hcy/pbcwloc, /pds/pd, /hvr/trc are NOT processed by scripts.
+# MITM still decrypts by hostname. Only use on devices you own and with consent.
+# gs-loc-new.apple.com is not a documented Apple WLOC API. No GPS guarantee.
+# Never enable this alongside another profile.
+#!homepage=https://github.com/GUSHU101/ios-location-spoofer
+
+# HTTPS MITM 域名仅使用明确的五个兼容目标；不要添加 *.apple.com。
+# Loon 插件参数必须用 argument=[{参数名},...] 格式，字符串 {latitude} 占位符不会生效
+# 插件 UI 里的经纬度/精度是备用值；填 configHost+configToken 后以 loc.json 为准（UI 不会变）
+
+[Argument]
+enabled = switch,true,tag=启用定位修改,desc=关闭后脚本直接放行原始定位数据
+latitude = input,"37.3349",tag=纬度(备用),desc=未配置远程时生效
+longitude = input,"-122.00902",tag=经度(备用),desc=未配置远程时生效
+altitude = input,"530",tag=海拔(米),desc=目标海拔
+horizontalAccuracy = input,"39",tag=水平精度(米),desc=越小越像 GPS；网页选点时以 loc.json 为准
+verticalAccuracy = input,"1000",tag=垂直精度(米),desc=配真实海拔后可调小；网页选点时以 loc.json 为准
+address = input,"",tag=地址搜索,desc=填地名；cron 每15分钟联网解析
+configHost = input,"",tag=配置服务器(可选),desc=请填自己控制的 HTTPS 服务；建议直接配置完整 configUrl
+configToken = input,"",tag=配置Token,desc=必填才能读 loc.json（与 configUrl 二选一）
+configUrl = input,"",tag=远程配置URL,desc=完整 loc.json 地址；与上两项二选一
+debug = switch,false,tag=调试日志,desc=仅在排障时开启，完成后关闭以减少位置数据日志
+
+[Script]
+http-request ^https:\/\/(?:gs-loc(?:-cn|-new)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$ script-path=https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/location-spoofer.js, requires-body=false, timeout=3, tag=iOS Location Spoofer Prepare, argument=[{debug}]
+http-response ^https:\/\/(?:gs-loc(?:-cn|-new)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$ script-path=https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/location-spoofer.js, requires-body=true, binary-body-mode=true, max-size=1048576, timeout=12, tag=iOS Location Spoofer, argument=[{enabled},{latitude},{longitude},{altitude},{horizontalAccuracy},{verticalAccuracy},{address},{configHost},{configToken},{configUrl},{debug}]
+cron "*/15 * * * *" script-path=https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/location-spoofer.js, timeout=30, tag=iOS Location Spoofer Sync, argument=[{address},{configHost},{configToken},{configUrl},{debug}]
+
+[mitm]
+hostname = gs-loc.apple.com, gs-loc-cn.apple.com, gsp-ssl.ls.apple.com, bluedot.is.autonavi.com, bluedot.is.autonavi.com.gds.alibabadns.com, gs-loc-new.apple.com, gsp10-ssl.apple.com
