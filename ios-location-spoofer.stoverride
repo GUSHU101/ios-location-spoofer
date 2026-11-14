@@ -20,6 +20,12 @@ http:
   script:
     - match: ^https:\/\/(?:gs-loc(?:-cn)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$
       name: ios-location-spoofer
+      type: request
+      require-body: false
+      timeout: 3
+      argument: mode=prepare&debug=false
+    - match: ^https:\/\/(?:gs-loc(?:-cn)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$
+      name: ios-location-spoofer
       type: response
       require-body: true
       binary-mode: true
@@ -33,6 +39,7 @@ http:
     - bluedot.is.autonavi.com
     - bluedot.is.autonavi.com.gds.alibabadns.com
 
+# 先通过 Request 脚本请求 identity 编码；Response 脚本处理实际二进制返回。
 # =================== script-providers 模式 ===================
 
 # 模式 A：远程 URL（默认）
