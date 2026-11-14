@@ -430,47 +430,44 @@
     return defaultValue;
   }
 
+  function checkedNumber(value, name, minimum, maximum, integral) {
+    if ((typeof value !== "number" && typeof value !== "string") ||
+        (typeof value === "string" && value.trim() === "")) {
+      throw new Error("INVALID_CONFIG: " + name);
+    }
+    var number = Number(value);
+    if (!Number.isFinite(number) || number < minimum || number > maximum) {
+      throw new Error("INVALID_CONFIG: " + name);
+    }
+    return integral ? Math.trunc(number) : number;
+  }
+
   function normalizeConfig(input) {
     var cfg = {};
     var key;
     for (key in DEFAULT_CONFIG) {
-      if (Object.prototype.hasOwnProperty.call(DEFAULT_CONFIG, key)) {
-        cfg[key] = DEFAULT_CONFIG[key];
-      }
+      if (Object.prototype.hasOwnProperty.call(DEFAULT_CONFIG, key)) cfg[key] = DEFAULT_CONFIG[key];
     }
     input = input || {};
     for (key in input) {
-      if (Object.prototype.hasOwnProperty.call(input, key)) {
-        cfg[key] = input[key];
-      }
+      if (Object.prototype.hasOwnProperty.call(input, key)) cfg[key] = input[key];
     }
-
     cfg.enabled = parseBoolean(cfg.enabled, true);
     cfg.failOpen = parseBoolean(cfg.failOpen, true);
     var mode = String(cfg.mode || "response").toLowerCase();
     cfg.mode = mode === "request" || mode === "prepare" || mode === "probe" || mode === "inspect" ? mode : "response";
-    cfg.latitude = Number(cfg.latitude);
-    cfg.longitude = Number(cfg.longitude);
-    cfg.horizontalAccuracy = Math.trunc(Number(cfg.horizontalAccuracy));
-    cfg.verticalAccuracy = Math.trunc(Number(cfg.verticalAccuracy));
-    cfg.altitude = Math.trunc(Number(cfg.altitude));
-    cfg.unknownValue4 = Math.trunc(Number(cfg.unknownValue4));
-    cfg.motionActivityType = Math.trunc(Number(cfg.motionActivityType));
-    cfg.motionActivityConfidence = Math.trunc(Number(cfg.motionActivityConfidence));
+    cfg.latitude = checkedNumber(cfg.latitude, "latitude", -90, 90, false);
+    cfg.longitude = checkedNumber(cfg.longitude, "longitude", -180, 180, false);
+    cfg.horizontalAccuracy = checkedNumber(cfg.horizontalAccuracy, "horizontalAccuracy", 0, 100000, true);
+    cfg.verticalAccuracy = checkedNumber(cfg.verticalAccuracy, "verticalAccuracy", 0, 100000, true);
+    cfg.altitude = checkedNumber(cfg.altitude, "altitude", -12000, 100000, true);
+    cfg.unknownValue4 = checkedNumber(cfg.unknownValue4, "unknownValue4", -2147483648, 2147483647, true);
+    cfg.motionActivityType = checkedNumber(cfg.motionActivityType, "motionActivityType", -2147483648, 2147483647, true);
+    cfg.motionActivityConfidence = checkedNumber(cfg.motionActivityConfidence, "motionActivityConfidence", -2147483648, 2147483647, true);
     cfg.dumpRaw = cfg.dumpRaw === true || String(cfg.dumpRaw).toLowerCase() === "true";
     cfg.dumpHeaders = cfg.dumpHeaders === true || String(cfg.dumpHeaders).toLowerCase() === "true";
     cfg.prepareHeaders = cfg.prepareHeaders === true || String(cfg.prepareHeaders).toLowerCase() === "true";
-    cfg.rawLimit = Math.trunc(Number(cfg.rawLimit || 0));
-    if (!Number.isFinite(cfg.rawLimit) || cfg.rawLimit < 0) {
-      cfg.rawLimit = 0;
-    }
-
-    if (!Number.isFinite(cfg.latitude) || cfg.latitude < -90 || cfg.latitude > 90) {
-      throw new Error("invalid latitude");
-    }
-    if (!Number.isFinite(cfg.longitude) || cfg.longitude < -180 || cfg.longitude > 180) {
-      throw new Error("invalid longitude");
-    }
+    cfg.rawLimit = checkedNumber(cfg.rawLimit, "rawLimit", 0, 1048576, true);
     return cfg;
   }
 
@@ -1226,13 +1223,14 @@
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("REMOTE_CONFIG_INVALID: expected object");
     }
-    var latitude = Number(value.latitude);
-    var longitude = Number(value.longitude);
-    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
-        !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    var lat, lng;
+    try {
+      lat = checkedNumber(value.latitude, "latitude", -90, 90, false);
+      lng = checkedNumber(value.longitude, "longitude", -180, 180, false);
+    } catch (err) {
       throw new Error("REMOTE_CONFIG_INVALID: coordinates absent or out of range");
     }
-    var result = { latitude: latitude, longitude: longitude };
+    var result = { latitude: lat, longitude: lng };
     if (Object.prototype.hasOwnProperty.call(value, "enabled")) {
       if (typeof value.enabled !== "boolean") throw new Error("REMOTE_CONFIG_INVALID: enabled must be boolean");
       result.enabled = value.enabled;
@@ -1240,11 +1238,11 @@
     var limits = { altitude: [-12000, 100000], horizontalAccuracy: [0, 100000], verticalAccuracy: [0, 100000] };
     for (var key in limits) {
       if (!Object.prototype.hasOwnProperty.call(limits, key) || value[key] == null) continue;
-      var num = Number(value[key]);
-      if (!Number.isFinite(num) || num < limits[key][0] || num > limits[key][1]) {
+      try {
+        result[key] = checkedNumber(value[key], key, limits[key][0], limits[key][1], true);
+      } catch (err2) {
         throw new Error("REMOTE_CONFIG_INVALID: " + key + " out of range");
       }
-      result[key] = Math.round(num);
     }
     return result;
   }
@@ -1262,9 +1260,8 @@
           return;
         }
         var rawStatus = String(response && (response.status || response.statusCode) || "");
-        var match = rawStatus.match(/([1-5][0-9]{2})/);
-        // Some clients expose status as a number, others as "HTTP/2 200".
-        // Numeric and HTTP status-line forms are both accepted.
+        var match = rawStatus.match(/(?:^|\s)([1-5][0-9]{2})(?=\s|$)/);
+        // Some clients expose 200, others a status line such as "HTTP/2 200".
         if (!match || Number(match[1]) !== 200) {
           callback(null, "REMOTE_HTTP_STATUS: " + (match ? match[1] : "unknown"));
           return;
@@ -1280,7 +1277,7 @@
         }
       });
     } catch (err) {
-      callback(null, "REMOTE_CLIENT_EXCEPTION: " + err.message);
+      callback(null, "REMOTE_CLIENT_EXCEPTION");
     }
   }
 
@@ -1451,7 +1448,10 @@
     for (key in sourceHeaders) {
       if (Object.prototype.hasOwnProperty.call(sourceHeaders, key)) {
         var lower = key.toLowerCase();
-        if (lower !== "content-length" && lower !== "content-encoding" && lower !== "transfer-encoding") {
+        var stale = ["content-length", "content-encoding", "transfer-encoding",
+          "content-type", "etag", "content-md5", "content-digest", "repr-digest",
+          "digest", "content-range", "accept-ranges"];
+        if (stale.indexOf(lower) === -1) {
           headers[key] = sourceHeaders[key];
         }
       }
@@ -1680,11 +1680,19 @@
     message = message || {};
     var request = typeof $request !== "undefined" ? $request : {};
     var method = message.method || request.method || "<none>";
-    var url = message.url || request.url || "<none>";
+    var url = String(message.url || request.url || "<none>").split("?")[0].split("#")[0];
     var status = message.status || message.statusCode || "<none>";
     console.log("Location spoofer raw " + label + " meta: method=" + method + ", url=" + url + ", status=" + status);
     if (config.dumpHeaders) {
-      console.log("Location spoofer raw " + label + " headers: " + jsonString(message.headers || {}));
+      var safeHeaders = {};
+      var allowed = ["content-type", "content-length", "content-encoding", "transfer-encoding", "accept-encoding"];
+      var source = message.headers || {};
+      for (var header in source) {
+        if (Object.prototype.hasOwnProperty.call(source, header) && allowed.indexOf(header.toLowerCase()) >= 0) {
+          safeHeaders[header] = source[header];
+        }
+      }
+      console.log("Location spoofer raw " + label + " headers: " + jsonString(safeHeaders));
     }
   }
 
@@ -1897,7 +1905,7 @@
                 ", lng=" +
                 config.longitude +
                 ", url=" +
-                (($request && $request.url) || "<none>")
+                String(($request && $request.url) || "<none>").split("?")[0]
             );
           }
           if (config.mode === "probe") {
