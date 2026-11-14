@@ -12,6 +12,7 @@
 | 你的目标 | 文档 |
 |---|---|
 | 第一次使用 Shadowrocket | [中文完整教程](使用教程.md) |
+| iOS 26 网页已保存但手机位置不更新 | [iOS 26 分层排障与验收](docs/ios26-troubleshooting.md) |
 | Read the guide in English | [English tutorial](使用教程.en.md) |
 | 用 Coolify 部署安全的网页选点器 | [Coolify 部署指南](COOLIFY.md) |
 | 用命令行部署 Cloudflare Worker | [Worker / Wrangler 指南](location-picker/worker/README.md) |
@@ -25,6 +26,8 @@
 4. 重连代理，关闭定位服务至少 10 秒后重新开启，再用 Apple 地图验证。
 
 新手请不要跳过证书信任步骤，完整操作和故障排查见[中文教程](使用教程.md)。
+
+**重要边界：** 网页保存成功、脚本读到新配置、iOS 系统实际采用修改后的定位，属于三个不同阶段。Apple 的 Core Location 并不提供通过 HTTPS 代理修改系统全局定位的公开 API。iOS 26 故障请先看[分层排查指南](docs/ios26-troubleshooting.md)。**公开仓库中的模块不应写入带密钥的 configUrl**；请在手机本地私有配置中替换单一 configUrl，若此前使用过公开 Token，需到服务端轮换。
 
 ## 支持的客户端
 
