@@ -1,0 +1,18 @@
+#!name=iOS Location Spoofer - Experimental Seven Hosts
+#!desc=研究测试扩展：7 个精确 MITM Host，6 个 WLOC Host 允许响应脚本；不修改定位数据上传接口，不能保证 iOS 系统定位生效。
+#!homepage=https://github.com/GUSHU101/ios-location-spoofer
+# EXPERIMENTAL: enable only on a device you control. Use the 2-host or 5-host profile for routine use.
+# gs-loc-new.apple.com is a candidate WLOC host, not a confirmed iOS 26 protocol match.
+# gsp10-ssl.apple.com is mainly reported for crowdsourced GPS/Wi-Fi/cell data UPLOADS.
+# Its non-WLOC paths are NOT intercepted by scripts, but MITM operates at hostname scope.
+# Never trust this module to override iOS hardware GPS or bypass TLS pinning.
+# Privacy note: opting into gsp10 MITM can expose sensitive upload plaintext to the local proxy.
+# For remote sync, add a PRIVATE URL-encoded configUrl to argument; NEVER commit read-only tokens.
+# Updates to this public module intentionally contain no remote credentials.
+
+[Script]
+iOS Location Spoofer Prepare = type=http-request,pattern=^https:\/\/(?:gs-loc(?:-cn|-new)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$,requires-body=0,timeout=3,script-path=https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/location-spoofer.js,argument=mode=prepare&debug=false
+iOS Location Spoofer = type=http-response,pattern=^https:\/\/(?:gs-loc(?:-cn|-new)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$,requires-body=1,binary-body-mode=1,max-size=1048576,timeout=10,script-path=https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/location-spoofer.js,argument=mode=response&latitude=37.3349&longitude=-122.00902&horizontalAccuracy=39&verticalAccuracy=1000&altitude=530&debug=false
+
+[MITM]
+hostname = %APPEND% gs-loc.apple.com, gs-loc-cn.apple.com, gsp-ssl.ls.apple.com, bluedot.is.autonavi.com, bluedot.is.autonavi.com.gds.alibabadns.com, gs-loc-new.apple.com, gsp10-ssl.apple.com
