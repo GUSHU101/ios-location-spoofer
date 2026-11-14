@@ -175,12 +175,13 @@ test("QX Base64 decoding handles padded binary values without trailing zeroes", 
 });
 test("QX preserves synthetic response suffix and bare protobuf framing", () => {
   const qx = require("../../location-spoofer-qx.js");
+  const qConfig = { ...qx.DEFAULT_CONFIG, ...remote };
   const prefixed = originalResponse();
   const withSuffix = core.concatBytes([prefixed, Uint8Array.from([0xaa, 0xbb])]);
-  const patched = qx.spoofAppleResponse(withSuffix, remote);
+  const patched = qx.spoofAppleResponse(withSuffix, qConfig);
   assert.deepEqual(Array.from(patched.response.slice(-2)), [0xaa, 0xbb]);
   const bare = core.extractAppleWLocPayload(prefixed).payload;
-  const bareResult = qx.spoofAppleResponse(bare, remote);
+  const bareResult = qx.spoofAppleResponse(bare, qConfig);
   assert.equal(bareResult.kind, "bare");
   assert.equal(bareResult.response[0], bare[0]);
 });
