@@ -1867,9 +1867,33 @@
     return prepareResponseBodySync(config);
   }
 
+  // Defense-in-depth: a user-installed MITM hostname is broader than the URL
+  // script matcher. Never rewrite telemetry uploads or unrelated APIs even if
+  // a proxy client invokes this script with an overly broad regex.
+  function isApprovedWlocUrl(url) {
+    return /^https:\/\/(?:gs-loc(?:-cn|-new)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc(?:\?.*)?$/.test(String(url || ""));
+  }
+
+  function isSuccessfulResponseStatus(response) {
+    var raw = response && (response.status || response.statusCode);
+    if (raw == null || raw === "") return true; // Some clients omit status.
+    var value = String(raw);
+    var match = value.match(/(?:^|\s)([1-5][0-9]{2})(?=\s|$)/);
+    return !!match && Number(match[1]) === 200;
+  }
+
   function runShadowrocket() {
     var hasRequest = typeof $request !== "undefined" && $request != null;
     var hasResponse = typeof $response !== "undefined" && $response != null;
+
+    if (hasRequest && $request.url && !isApprovedWlocUrl($request.url)) {
+      donePassThrough();
+      return;
+    }
+    if (hasResponse && !isSuccessfulResponseStatus($response)) {
+      donePassThrough();
+      return;
+    }
 
     if (!hasRequest && !hasResponse) {
       runMaintenanceCron();
@@ -2017,7 +2041,9 @@
     readRemoteConfigCache: readRemoteConfigCache,
     writeRemoteConfigCache: writeRemoteConfigCache,
     geocodeAddress: geocodeAddress,
-    prepareRequestHeaders: prepareRequestHeaders
+    prepareRequestHeaders: prepareRequestHeaders,
+    isApprovedWlocUrl: isApprovedWlocUrl,
+    isSuccessfulResponseStatus: isSuccessfulResponseStatus
   };
 
   if (typeof module !== "undefined" && module.exports) {
