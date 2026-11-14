@@ -76,7 +76,7 @@ https://picker.example.com/
 
 在登录表单中输入 `SERVICE_HEX_64_LOCATIONPICKERADMIN` 的实际值。验证成功后，服务会设置 `HttpOnly`、`SameSite=Strict` 会话 Cookie；管理密钥不会保留在地址栏或交给页面 JavaScript。
 
-登录后滚动到页面底部的**手机端配置**。点击“复制地址”可得到 `configUrl`，点击“复制参数”可得到适合追加到 Shadowrocket / Stash `argument` 末尾的完整参数。展开“查看各客户端设置方法”可查看 Surge、Loon 等客户端的对应步骤。
+登录后滚动到页面底部的**手机端配置**。点击“复制地址”可得到 `configUrl`，点击“复制参数”可得到适合 Shadowrocket / Stash `argument` 使用的完整参数。**如果 argument 已有 configUrl，必须先删除旧 configUrl，再粘贴新的参数，确保仅出现一次。**展开“查看各客户端设置方法”可查看 Surge、Loon 等客户端的对应步骤。
 
 面板通过已登录会话按需生成只读地址，不会把只读密钥直接写入管理页 HTML。手工配置时，地址格式仍为：
 
@@ -140,3 +140,8 @@ https://picker.example.com/loc.json?token=<SERVICE_HEX_64_LOCATIONPICKERREAD>
 ## 本地 Compose
 
 只做本地测试时，使用 [`location-picker/docker-compose.yml`](location-picker/docker-compose.yml) 和 [`location-picker/.env.example`](location-picker/.env.example)。本地 Compose 与 Coolify 入口不同，不要把本地 `.env` 提交到 Git。
+
+
+## iOS 26 同步诊断
+
+网页保存成功不等于手机已读取配置，也不等于系统采用目标定位。详细检查流程见 [iOS 26 分层排障与 Apple API 边界](docs/ios26-troubleshooting.md)。公开模块不应嵌入任何真实 Token，服务端此前暴露的 READ_TOKEN 必须轮换。
