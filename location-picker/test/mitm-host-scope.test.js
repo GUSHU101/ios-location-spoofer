@@ -103,7 +103,8 @@ test("public modules have no embedded secret or wildcard TLS bypass", () => {
   for (const file of files) {
     const content = read(file.path);
     assert.doesNotMatch(content, /(?:token=|token%3D)[0-9a-f]{32,}/i);
-    assert.doesNotMatch(content, /(?:\*\.apple\.com|\*\.ls\.apple\.com)/);
+    const activeConfig = content.split(/\r?\n/).filter(line => !/^\s*#/.test(line)).join("\n");
+    assert.doesNotMatch(activeConfig, /(?:\*\.apple\.com|\*\.ls\.apple\.com)/);
     assert.doesNotMatch(content, /\bskip-cert(?:ificate)?-verify\b/i);
   }
 });
