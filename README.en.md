@@ -34,6 +34,22 @@ The certificate trust step is essential. See the [English tutorial](使用教程
 
 Read the [domain audit, TLS limits, and iOS 26 diagnostic plan](docs/mitm-host-audit.md). The existing compatibility module explicitly targets five community-observed WLOC hosts. You can alternatively use the [minimal Shadowrocket MITM module](ios-location-spoofer-minimal.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-minimal.sgmodule), limited to the two primary Apple hosts. **Do not enable both modules at once.** Scripts only rewrite HTTPS `/clls/wloc` responses, but MITM decryption applies at the hostname level, not just a URL path. More hosts do not bypass TLS certificate pinning.
 
+## Optional seven-host research profiles
+
+An **opt-in seven-host experimental configuration** adds `gs-loc-new.apple.com` and `gsp10-ssl.apple.com`, while retaining the minimal two-host and standard five-host profiles. Only the former new host is considered a candidate `/clls/wloc` rewrite target. The latter is primarily associated with location/sensor **uploads** and must not be rewritten; opt-in HTTPS MITM nonetheless decrypts traffic at the hostname boundary.
+
+[Read the seven-host evidence, privacy boundaries, client profiles and real-device verification guide](docs/seven-host-experimental.md).
+
+| Experimental client | Module |
+|---|---|
+| Shadowrocket | [Seven-host profile](ios-location-spoofer-experimental.sgmodule) |
+| Surge | [Seven-host profile](ios-location-spoofer-experimental-surge.sgmodule) |
+| Loon | [Seven-host profile](ios-location-spoofer-experimental.lnplugin) |
+| Stash | [Seven-host profile](ios-location-spoofer-experimental.stoverride) |
+| Quantumult X | [Seven-host profile](ios-location-spoofer-experimental.snippet) |
+
+**Never enable multiple profile variants together.** Additional hosts cannot bypass TLS pinning or guarantee adoption of modified network-location responses by Core Location.
+
 ## Supported clients
 
 | Client | Configuration | Import path | Status |
