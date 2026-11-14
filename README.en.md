@@ -30,6 +30,10 @@ The picker saving a coordinate, the phone fetching it, and Core Location adoptin
 
 The certificate trust step is essential. See the [English tutorial](使用教程.en.md) for the complete walkthrough and troubleshooting flow.
 
+## HTTPS MITM scope and least-privilege option
+
+Read the [domain audit, TLS limits, and iOS 26 diagnostic plan](docs/mitm-host-audit.md). The existing compatibility module explicitly targets five community-observed WLOC hosts. You can alternatively use the [minimal Shadowrocket MITM module](ios-location-spoofer-minimal.sgmodule) · [Raw import](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-minimal.sgmodule), limited to the two primary Apple hosts. **Do not enable both modules at once.** Scripts only rewrite HTTPS `/clls/wloc` responses, but MITM decryption applies at the hostname level, not just a URL path. More hosts do not bypass TLS certificate pinning.
+
 ## Supported clients
 
 | Client | Configuration | Import path | Status |
