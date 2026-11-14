@@ -99,6 +99,15 @@ test("Shadowrocket and Surge include a request-stage identity-encoding preflight
     assert.match(text, /type=http-response,pattern=/);
   }
 });
+test("Stash preflight and response use identical HTTPS-only URL patterns", () => {
+  const content = read("ios-location-spoofer.stoverride");
+  const patterns = regexPatterns({path:"ios-location-spoofer.stoverride"},content);
+  assert.equal(patterns.length,2);
+  assert.equal(patterns[0],patterns[1]);
+  assert.match(content,/type: request/);
+  assert.match(content,/argument: mode=prepare&debug=false/);
+  assert.match(content,/type: response/);
+});
 test("public modules have no embedded secret or wildcard TLS bypass", () => {
   for (const file of files) {
     const content = read(file.path);
