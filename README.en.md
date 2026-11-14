@@ -17,6 +17,10 @@ Rewrite coordinates returned by Apple's location service through the HTTPS-decry
 | Deploy a Worker with Wrangler | [Worker CLI guide (Chinese)](location-picker/worker/README.md) |
 | Deploy a Worker in the Cloudflare dashboard | [Worker dashboard guide (Chinese)](location-picker/cloudflare-webui/README.md) |
 
+## iOS 26 troubleshooting and public API boundaries
+
+The picker saving a coordinate, the phone fetching it, and Core Location adopting it are distinct outcomes. This project rewrites selected Apple network-location responses, not a documented system-wide GPS replacement API. See the [layered iOS 26 diagnosis guide](docs/ios26-troubleshooting.md). Keep read-only tokens in private local client settings and rotate any token previously published in a public module.
+
 ## Quick start
 
 1. Choose a proxy client below and import its configuration.
