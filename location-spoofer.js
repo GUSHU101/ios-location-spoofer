@@ -1013,7 +1013,7 @@
       encodeURIComponent(String(lat)) +
       "&longitude=" +
       encodeURIComponent(String(lng));
-    $httpClient.get({ url: url, timeout: 4000 }, function (error, response, body) {
+    $httpClient.get({ url: url, timeout: 4 }, function (error, response, body) {
       if (error || !body) {
         callback(null);
         return;
@@ -1061,7 +1061,7 @@
     $httpClient.get(
       {
         url: url,
-        timeout: 8000,
+        timeout: 8,
         headers: { "User-Agent": "ios-location-spoofer/1.0 (Loon plugin)" }
       },
       function (error, response, body) {
@@ -1255,9 +1255,10 @@
       return;
     }
     try {
-      $httpClient.get({ url: url, timeout: timeout || 2500 }, function (error, response, body) {
+      // $httpClient.timeout is measured in seconds (see Surge JavaScript API).
+      $httpClient.get({ url: url, timeout: timeout || 3 }, function (error, response, body) {
         if (error) {
-          callback(null, "REMOTE_FETCH_FAILED: " + String(error));
+          callback(null, "REMOTE_FETCH_FAILED");
           return;
         }
         var rawStatus = String(response && (response.status || response.statusCode) || "");
@@ -1284,7 +1285,7 @@
   }
 
   function refreshRemoteConfigCache(url, debug) {
-    fetchRemoteConfig(url, 5000, debug, function (data, err) {
+    fetchRemoteConfig(url, 5, debug, function (data, err) {
       if (data) {
         writeRemoteConfigCache(url, data);
         return;
@@ -1377,7 +1378,7 @@
     }
     // Network-first: the latest saved picker coordinates must be used for
     // *this* response, not only written to cache for a future location request.
-    fetchRemoteConfig(configUrl, 2500, debug, function (data, err) {
+    fetchRemoteConfig(configUrl, 3, debug, function (data, err) {
       if (data) {
         writeRemoteConfigCache(configUrl, data);
         if (debug) console.log("Location spoofer REMOTE_CONFIG_FRESH: " + data.latitude + "," + data.longitude);
@@ -1411,7 +1412,7 @@
     var configUrl = resolveConfigUrl(args);
     if (configUrl) {
       pending += 1;
-      fetchRemoteConfig(configUrl, 8000, debug, function (data, err) {
+      fetchRemoteConfig(configUrl, 8, debug, function (data, err) {
         if (data) {
           writeRemoteConfigCache(configUrl, data);
           if (debug) {
