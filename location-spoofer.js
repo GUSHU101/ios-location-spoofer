@@ -267,16 +267,18 @@
     var current = offset;
 
     while (current < bytes.length) {
+      if (current - offset >= 10) throw new Error("protobuf varint exceeds 64 bits");
       var b = bytes[current];
+      // The 10th byte can contain only bit 63; higher bits overflow uint64.
+      if (current - offset === 9 && b > 1) {
+        throw new Error("protobuf varint exceeds 64 bits");
+      }
       current += 1;
       result |= BigInt(b & 0x7f) << shift;
       if ((b & 0x80) === 0) {
         return { value: result, offset: current };
       }
       shift += 7n;
-      if (shift > 70n) {
-        throw new Error("varint too long");
-      }
     }
 
     throw new Error("unterminated varint");
@@ -305,8 +307,9 @@
 
       var fieldNumber = Number(key.value >> 3n);
       var wireType = Number(key.value & 0x7n);
-      if (fieldNumber === 0) {
-        throw new Error("protobuf field number 0");
+      // Protocol Buffers field numbers are limited to 2^29 - 1.
+      if (fieldNumber === 0 || fieldNumber > 536870911) {
+        throw new Error("protobuf field number outside valid range");
       }
 
       var valueStart = offset;
@@ -317,9 +320,11 @@
         valueEnd = offset + 8;
       } else if (wireType === 2) {
         var lengthInfo = decodeVarint(bytes, offset);
-        var length = Number(lengthInfo.value);
         valueStart = lengthInfo.offset;
-        valueEnd = valueStart + length;
+        if (lengthInfo.value > BigInt(bytes.length - valueStart)) {
+          throw new Error("protobuf length-delimited field exceeds buffer");
+        }
+        valueEnd = valueStart + Number(lengthInfo.value);
       } else if (wireType === 5) {
         valueEnd = offset + 4;
       } else {
@@ -599,6 +604,10 @@
       appIdentifier: appIdentifier,
       osVersion: osVersion,
       functionId: functionId,
+      // Preserve the original envelope byte-for-byte, including non-ASCII
+      // Pascal strings and trailing bytes not understood by this implementation.
+      prefix: bytes.slice(0, state.offset - 4),
+      suffix: bytes.slice(state.offset + payloadLength),
       payload: bytes.slice(state.offset, state.offset + payloadLength)
     };
   }
@@ -763,7 +772,16 @@
         functionId: extraction.arpc.functionId,
         payload: patched.payload
       };
-      response = serializeArpc(arpcOut);
+      if (extraction.arpc.prefix) {
+        response = concatBytes([
+          extraction.arpc.prefix,
+          writeUInt32BE(patched.payload.length),
+          patched.payload,
+          extraction.arpc.suffix || bytesFromArray([])
+        ]);
+      } else {
+        response = serializeArpc(arpcOut);
+      }
     } else if (extraction.kind === "marker") {
       // Rebuild: original prefix + marker bytes + new uint16 len + patched payload + suffix.
       var newLenBytes = writeUInt16BE(patched.payload.length);
@@ -1254,7 +1272,11 @@
     }
     try {
       // $httpClient.timeout is measured in seconds (see Surge JavaScript API).
-      $httpClient.get({ url: url, timeout: timeout || 3 }, function (error, response, body) {
+      $httpClient.get({
+        url: url,
+        timeout: timeout || 3,
+        headers: { "Cache-Control": "no-cache", "Pragma": "no-cache", "Accept": "application/json" }
+      }, function (error, response, body) {
         if (error) {
           callback(null, "REMOTE_FETCH_FAILED");
           return;
