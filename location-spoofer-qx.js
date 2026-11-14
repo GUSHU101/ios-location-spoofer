@@ -55,25 +55,28 @@
   // ========== Base64 (QX 专用) ==========
 
   function base64ToBytes(b64) {
-    var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    var lookup = {}, i;
-    for (i = 0; i < alphabet.length; i++) lookup[alphabet[i]] = i;
-    b64 = b64.replace(/[^A-Za-z0-9\+\/]/g, "");
-    var len = b64.length, out = [], padding = 0;
-    if (len > 0 && b64[len - 1] === "=") padding++;
-    if (len > 1 && b64[len - 2] === "=") padding++;
-    var bufLen = (len / 4) * 3 - padding;
-    var buf = new Uint8Array(bufLen), pos = 0;
-    for (i = 0; i < len; i += 4) {
-      var enc1 = lookup[b64[i]], enc2 = lookup[b64[i + 1]], enc3 = lookup[b64[i + 2]], enc4 = lookup[b64[i + 3]];
-      var chr1 = (enc1 << 2) | (enc2 >> 4);
-      var chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
-      var chr3 = ((enc3 & 3) << 6) | enc4;
-      buf[pos++] = chr1;
-      if (enc3 !== 64) buf[pos++] = chr2;
-      if (enc4 !== 64) buf[pos++] = chr3;
+    // Keep padding: deleting "=" before computing the buffer length silently
+    // inserted zero bytes for padded base64 values.
+    b64 = String(b64).replace(/\s/g, "");
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(b64)) {
+      throw new Error("invalid base64");
     }
-    return buf;
+    var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    var lookup = {};
+    for (var k = 0; k < alphabet.length; k++) lookup[alphabet[k]] = k;
+    var padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
+    var out = new Uint8Array((b64.length / 4) * 3 - padding);
+    var pos = 0;
+    for (var i = 0; i < b64.length; i += 4) {
+      var a = lookup[b64[i]], b = lookup[b64[i + 1]];
+      var c = b64[i + 2] === "=" ? 0 : lookup[b64[i + 2]];
+      var d = b64[i + 3] === "=" ? 0 : lookup[b64[i + 3]];
+      var v = (a << 18) | (b << 12) | (c << 6) | d;
+      if (pos < out.length) out[pos++] = (v >> 16) & 255;
+      if (pos < out.length) out[pos++] = (v >> 8) & 255;
+      if (pos < out.length) out[pos++] = v & 255;
+    }
+    return out;
   }
 
   function bytesToBase64(bytes) {
@@ -307,8 +310,13 @@
     } else if (extraction.kind === "marker") {
       var newLenBytes = writeUInt16BE(patched.payload.length);
       response = concatBytes([extraction.prefix, extraction.markerAndLen.slice(0, APPLE_WLOC_MARKER.length), newLenBytes, patched.payload, extraction.suffix]);
+    } else if (extraction.kind === "synthetic") {
+      response = concatBytes([
+        extraction.prefix, writeUInt16BE(patched.payload.length),
+        patched.payload, extraction.suffix || new Uint8Array([])
+      ]);
     } else {
-      response = buildAppleWLocResponse(patched.payload, extraction.prefix);
+      response = patched.payload;
     }
     return { response: response, payload: patched.payload, wifiCount: patched.wifiCount, cellCount: patched.cellCount, kind: extraction.kind };
   }
@@ -381,6 +389,11 @@
         if (responseBytes.length < 2) { $done({}); return; }
         if (config.debug) console.log("Location spoofer QX response: " + responseBytes.length + " bytes, head=" + hexPreview(responseBytes, 32));
         var result = spoofAppleResponse(responseBytes, config);
+        if (result.wifiCount + result.cellCount === 0) {
+          if (config.debug) console.log("Location spoofer NO_PATCHABLE_LOCATION_FIELDS");
+          $done({});
+          return;
+        }
         if (config.debug) console.log("Location spoofer patched " + result.wifiCount + " wifi, " + result.cellCount + " cell, kind=" + result.kind + ", response=" + result.response.length + " bytes");
         if (config.debug) console.log("Location spoofer locations: " + patchedPayloadSummary(result.payload));
         // QX: 二进制改后响应必须用 $done({bodyBytes: ArrayBuffer}) 回写
