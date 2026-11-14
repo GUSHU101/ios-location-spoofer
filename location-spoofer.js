@@ -1202,7 +1202,7 @@
       if (!Number.isFinite(Number(entry.ts)) || Date.now() - entry.ts > 900000 || entry.ts > Date.now() + 60000) {
         return null;
       }
-      return entry.data;
+      return validateRemoteConfig(entry.data);
     } catch (err) {
       return null;
     }
@@ -1261,9 +1261,9 @@
           return;
         }
         var rawStatus = String(response && (response.status || response.statusCode) || "");
-        var match = rawStatus.match(/(?:^|\\s)([1-5][0-9]{2})(?:\\s|$)/);
+        var match = rawStatus.match(/([1-5][0-9]{2})/);
         // Some clients expose status as a number, others as "HTTP/2 200".
-        if (!match) match = rawStatus.match(/\\b([1-5][0-9]{2})\\b/);
+        // Numeric and HTTP status-line forms are both accepted.
         if (!match || Number(match[1]) !== 200) {
           callback(null, "REMOTE_HTTP_STATUS: " + (match ? match[1] : "unknown"));
           return;
@@ -1370,7 +1370,7 @@
       return;
     }
     if (!/^https:\/\//i.test(configUrl) &&
-        !/^http:\/\/(?:localhost|127\\.0\\.0\\.1)(?::\\d+)?\//i.test(configUrl)) {
+        !/^http:\/\/(?:localhost|127[.]0[.]0[.]1)(?::[0-9]+)?\//i.test(configUrl)) {
       console.log("Location spoofer config error: remote URL requires HTTPS");
       callback(null);
       return;
