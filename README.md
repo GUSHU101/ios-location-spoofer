@@ -37,11 +37,11 @@
 
 | 客户端 | 配置文件 | 导入位置 | 状态 |
 |---|---|---|---|
-| Shadowrocket | [查看](ios-location-spoofer.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule) | 配置 → 模块 → `+` → 来自 URL | 已验证 |
-| Surge | [查看](ios-location-spoofer-surge.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-surge.sgmodule) | 首页 → 模块 → 安装新模块 | 已验证 |
-| Loon | [查看](ios-location-spoofer.lnplugin) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.lnplugin) | 设置 → 插件 → 添加插件 | 已验证 |
-| Quantumult X | [查看](ios-location-spoofer.snippet) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.snippet) | 设置 → 重写 → 添加 | 待更多实测 |
-| Stash | [查看](ios-location-spoofer.stoverride) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.stoverride) | 覆写 → 安装覆写 | 已验证 |
+| Shadowrocket | [查看](ios-location-spoofer.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.sgmodule) | 配置 → 模块 → `+` → 来自 URL | 配置检查通过；iOS 26 待真机验收 |
+| Surge | [查看](ios-location-spoofer-surge.sgmodule) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer-surge.sgmodule) | 首页 → 模块 → 安装新模块 | 配置检查通过；iOS 26 待真机验收 |
+| Loon | [查看](ios-location-spoofer.lnplugin) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.lnplugin) | 设置 → 插件 → 添加插件 | 配置检查通过；iOS 26 待真机验收 |
+| Quantumult X | [查看](ios-location-spoofer.snippet) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.snippet) | 设置 → 重写 → 添加 | 仅静态检查；真机待验证 |
+| Stash | [查看](ios-location-spoofer.stoverride) · [直接导入](https://raw.githubusercontent.com/GUSHU101/ios-location-spoofer/main/ios-location-spoofer.stoverride) | 覆写 → 安装覆写 | 配置检查通过；iOS 26 待真机验收 |
 
 排查异常时，至少记录客户端版本、iOS 版本、请求 Host 和原始错误日志；不要公开密钥、Cookie、证书或完整私有 URL。
 
