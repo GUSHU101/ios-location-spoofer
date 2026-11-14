@@ -145,3 +145,7 @@ https://picker.example.com/loc.json?token=<SERVICE_HEX_64_LOCATIONPICKERREAD>
 ## iOS 26 同步诊断
 
 网页保存成功不等于手机已读取配置，也不等于系统采用目标定位。详细检查流程见 [iOS 26 分层排障与 Apple API 边界](docs/ios26-troubleshooting.md)。公开模块不应嵌入任何真实 Token，服务端此前暴露的 READ_TOKEN 必须轮换。
+
+## 证书与 MITM 范围
+
+Coolify 为**网页选点服务**提供 HTTPS，与 iPhone 上对 Apple 定位服务实施的 HTTPS 解密是两条独立连接。Coolify HTTPS 证书正常，不能证明 iOS 26 上 WLOC MITM 可用。请对照 [MITM 域名范围审计](docs/mitm-host-audit.md)，勿通过 `*.apple.com` 扩大解密范围。
